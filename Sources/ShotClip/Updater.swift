@@ -1,5 +1,30 @@
 import AppKit
 
+// Presents an NSAlert WITHOUT blocking the main run loop (so global hotkeys keep working).
+// A tiny transparent host window is created just to hang the sheet on; it's torn down on dismiss.
+enum NonBlockingAlert {
+    private static var hosts: [NSWindow] = []
+
+    static func present(_ alert: NSAlert, completion: ((NSApplication.ModalResponse) -> Void)? = nil) {
+        let host = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+                            styleMask: [.borderless], backing: .buffered, defer: false)
+        host.isReleasedWhenClosed = false
+        host.alphaValue = 0
+        host.level = .floating
+        if let screen = NSScreen.main {
+            host.setFrameOrigin(NSPoint(x: screen.frame.midX, y: screen.frame.midY))
+        }
+        host.orderFrontRegardless()
+        hosts.append(host)
+        NSApp.activate(ignoringOtherApps: true)
+        alert.beginSheetModal(for: host) { resp in
+            completion?(resp)
+            host.orderOut(nil)
+            hosts.removeAll { $0 === host }
+        }
+    }
+}
+
 enum Updater {
     static let repo = "Ivanwuyifan/ShotClip"
     private static let apiURL = "https://api.github.com/repos/\(repo)/releases/latest"
@@ -27,8 +52,7 @@ enum Updater {
                         let a = NSAlert()
                         a.messageText = "You're up to date"
                         a.informativeText = "ShotClip \(currentVersion) is the latest version."
-                        NSApp.activate(ignoringOtherApps: true)
-                        a.runModal()
+                        NonBlockingAlert.present(a)
                     }
                 }
                 return
@@ -63,18 +87,19 @@ enum Updater {
         alert.addButton(withTitle: "Update & Restart")
         alert.addButton(withTitle: "Open Release Page")
         alert.addButton(withTitle: "Later")
-        NSApp.activate(ignoringOtherApps: true)
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            if let z = zipURLString, let url = URL(string: z) {
-                downloadAndInstall(url)
-            } else {
+        NonBlockingAlert.present(alert) { resp in
+            switch resp {
+            case .alertFirstButtonReturn:
+                if let z = zipURLString, let url = URL(string: z) {
+                    downloadAndInstall(url)
+                } else {
+                    openReleasePage()
+                }
+            case .alertSecondButtonReturn:
                 openReleasePage()
+            default:
+                break
             }
-        case .alertSecondButtonReturn:
-            openReleasePage()
-        default:
-            break
         }
     }
 
@@ -144,7 +169,9 @@ enum Updater {
         a.informativeText = msg + "\n\nYou can download manually from the release page."
         a.addButton(withTitle: "Open Release Page")
         a.addButton(withTitle: "OK")
-        if a.runModal() == .alertFirstButtonReturn { openReleasePage() }
+        NonBlockingAlert.present(a) { resp in
+            if resp == .alertFirstButtonReturn { openReleasePage() }
+        }
     }
 
     enum UpdateError: LocalizedError {

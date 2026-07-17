@@ -8,9 +8,10 @@ enum Uninstaller {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Uninstall")
         alert.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        perform()
+        NonBlockingAlert.present(alert) { resp in
+            guard resp == .alertFirstButtonReturn else { return }
+            perform()
+        }
     }
 
     private static func perform() {

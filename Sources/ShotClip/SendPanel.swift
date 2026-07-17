@@ -214,12 +214,12 @@ final class SendPanel: NSPanel {
         alert.informativeText = "To let ShotClip auto-paste into the target app, enable Accessibility once:\n\n1. System Settings → Privacy & Security → Accessibility\n2. Turn on ShotClip\n3. Quit and reopen ShotClip (the permission doesn't apply to an already-running app)\n\nUntil then, the screenshot is already on the clipboard and the target app is in front — just press ⌘V."
         alert.addButton(withTitle: "Open Accessibility Settings")
         alert.addButton(withTitle: "Later")
-        NSApp.activate(ignoringOtherApps: true)
-        let resp = alert.runModal()
-        if resp == .alertFirstButtonReturn {
-            Sender.promptAccessibility()
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                NSWorkspace.shared.open(url)
+        NonBlockingAlert.present(alert) { resp in
+            if resp == .alertFirstButtonReturn {
+                Sender.promptAccessibility()
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                    NSWorkspace.shared.open(url)
+                }
             }
         }
     }
