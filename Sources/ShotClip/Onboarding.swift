@@ -123,11 +123,12 @@ final class OnboardingWindow: NSWindow, NSWindowDelegate {
             action: { Onboarding.requestAccessibility() })
         let keys = PermissionRow(
             title: "Free up ⌘⇧4",
-            detail: "Turn off the native shortcut so ⌘⇧4 is ShotClip's.\n(Keyboard → Shortcuts → Screenshots)",
+            detail: "Open Keyboard settings → click \"Keyboard Shortcuts…\" → Screenshots, then uncheck the ⌘⇧4 items.",
             check: { false },
             action: { Onboarding.openKeyboardShortcuts() },
             optional: true)
-        rows = [screen, ax, keys]
+        // Screen Recording goes last: it's the one that needs a quit-and-reopen.
+        rows = [keys, ax, screen]
         for r in rows {
             r.view.translatesAutoresizingMaskIntoConstraints = false
             r.view.widthAnchor.constraint(equalToConstant: 432).isActive = true
