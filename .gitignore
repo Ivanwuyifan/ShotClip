@@ -1,0 +1,4 @@
+.build/
+ShotClip.app/
+*.xcodeproj
+.DS_Store
