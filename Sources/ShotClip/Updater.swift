@@ -33,6 +33,18 @@ enum Updater {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
     }
 
+    // Self-update can only overwrite the app in place if the bundle lives on a
+    // writable path. When ShotClip is run straight from a downloaded zip, macOS
+    // App Translocation mounts it read-only under .../AppTranslocation/…, so any
+    // in-place replace fails. Detect that so we can guide the user instead.
+    static func canSelfUpdate() -> Bool {
+        let path = Bundle.main.bundlePath
+        if path.contains("/AppTranslocation/") { return false }
+        // the app bundle must sit in a writable parent directory
+        let parent = (path as NSString).deletingLastPathComponent
+        return FileManager.default.isWritableFile(atPath: parent)
+    }
+
     static func checkInBackground(manual: Bool = false) {
         guard let url = URL(string: apiURL) else { return }
         var req = URLRequest(url: url)
@@ -81,6 +93,12 @@ enum Updater {
     }
 
     private static func promptUpdate(version: String, notes: String, zipURLString: String?) {
+        // If the app is running from a read-only / translocated location, it can't
+        // replace itself. Guide the user to move it to Applications first.
+        guard canSelfUpdate() else {
+            promptMoveToApplications(version: version)
+            return
+        }
         let alert = NSAlert()
         alert.messageText = "ShotClip \(version) is available"
         alert.informativeText = "Current version \(currentVersion).\n\n\(notes.prefix(300))"
@@ -95,6 +113,25 @@ enum Updater {
                 } else {
                     openReleasePage()
                 }
+            case .alertSecondButtonReturn:
+                openReleasePage()
+            default:
+                break
+            }
+        }
+    }
+
+    private static func promptMoveToApplications(version: String) {
+        let alert = NSAlert()
+        alert.messageText = "Move ShotClip to Applications to update"
+        alert.informativeText = "ShotClip \(version) is available, but it's running from a read-only location (macOS App Translocation), so it can't update itself.\n\nQuit ShotClip, drag it into your Applications folder, then reopen it — after that, updates install automatically.\n\nCurrent version \(currentVersion)."
+        alert.addButton(withTitle: "Open Applications Folder")
+        alert.addButton(withTitle: "Open Release Page")
+        alert.addButton(withTitle: "Later")
+        NonBlockingAlert.present(alert) { resp in
+            switch resp {
+            case .alertFirstButtonReturn:
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
             case .alertSecondButtonReturn:
                 openReleasePage()
             default:
