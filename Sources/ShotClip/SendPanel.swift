@@ -12,9 +12,18 @@ enum Sender {
         "org.alacritty",
     ]
 
-    static func isTerminal(_ app: NSRunningApplication) -> Bool {
+    // Apps whose paste target is plain text (terminals, code editors) get the
+    // file path instead of the image, which they can't render inline.
+    private static let pathPrefixes: [String] = [
+        "com.jetbrains.",       // IntelliJ IDEA, PyCharm, GoLand, WebStorm, …
+        "com.microsoft.VSCode", // VS Code
+        "com.sublimetext.",
+    ]
+
+    static func wantsPath(_ app: NSRunningApplication) -> Bool {
         guard let id = app.bundleIdentifier else { return false }
-        return terminalBundleIDs.contains(id)
+        if terminalBundleIDs.contains(id) { return true }
+        return pathPrefixes.contains { id.hasPrefix($0) }
     }
 
     static func copyImage(_ url: URL) {
@@ -32,7 +41,7 @@ enum Sender {
 
     static func send(imageURL: URL, to app: NSRunningApplication) {
         ClipboardMonitor.shared.suppressNext()
-        if isTerminal(app) {
+        if wantsPath(app) {
             copyPath(imageURL)
         } else {
             copyImage(imageURL)
@@ -152,6 +161,26 @@ final class SendPanel: NSPanel {
         }
     }
 
+    // Bundle-id prefixes shown first in the send panel (when running), in this order.
+    // Edit this list to change which apps float to the top.
+    private static let priorityPrefixes: [String] = [
+        "com.jetbrains.",                   // IntelliJ IDEA, PyCharm, GoLand, WebStorm, …
+        "com.microsoft.VSCode",             // VS Code
+        "com.todesktop.230313mzl4w4u92",    // Cursor
+        "com.tencent.xinWeChat",            // WeChat
+        "com.mitchellh.ghostty",            // Ghostty
+        "com.anthropic.claudefordesktop",   // Claude
+        "com.microsoft.teams2",             // Microsoft Teams
+        "com.openai.codex",                 // Codex
+    ]
+
+    private static func priorityRank(_ bundleID: String) -> Int {
+        for (i, prefix) in priorityPrefixes.enumerated() where bundleID.hasPrefix(prefix) {
+            return i
+        }
+        return Int.max
+    }
+
     private static let excludedBundleIDs: Set<String> = [
         "com.apple.iCal",
         "com.apple.reminders",
@@ -176,9 +205,19 @@ final class SendPanel: NSPanel {
         }
         let recents = SendPanel.recentBundleIDs
         return apps.sorted { a, b in
-            let ra = recents.firstIndex(of: a.bundleIdentifier ?? "") ?? Int.max
-            let rb = recents.firstIndex(of: b.bundleIdentifier ?? "") ?? Int.max
+            let ida = a.bundleIdentifier ?? "", idb = b.bundleIdentifier ?? ""
+            // 1. priority apps form the top tier
+            let inPa = Self.priorityRank(ida) != Int.max
+            let inPb = Self.priorityRank(idb) != Int.max
+            if inPa != inPb { return inPa }
+            // 2. within a tier, most-recently-sent first
+            let ra = recents.firstIndex(of: ida) ?? Int.max
+            let rb = recents.firstIndex(of: idb) ?? Int.max
             if ra != rb { return ra < rb }
+            // 3. priority apps never sent to: fall back to list order
+            let pa = Self.priorityRank(ida), pb = Self.priorityRank(idb)
+            if pa != pb { return pa < pb }
+            // 4. alphabetical
             return (a.localizedName ?? "") < (b.localizedName ?? "")
         }
     }
