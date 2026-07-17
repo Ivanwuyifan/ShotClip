@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Show bar (⌘⇧Space)", action: #selector(showOverlay), keyEquivalent: "")
         menu.addItem(withTitle: "Capture region (⌘⇧4)", action: #selector(capture), keyEquivalent: "")
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Check for Updates…", action: #selector(checkUpdates), keyEquivalent: "")
         menu.addItem(withTitle: "Quit ShotClip", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
 
@@ -35,6 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         ClipboardMonitor.shared.start()
+
+        // 启动 3 秒后静默检查 GitHub 是否有新版
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            Updater.checkInBackground()
+        }
 
         Capture.onCaptured = { [weak self] url in
             // 截图完成后自动放进剪贴板，可直接 ⌘V 粘出图。
@@ -66,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showOverlay() { overlay.toggle() }
     @objc private func capture() { Capture.interactiveRegion() }
+    @objc private func checkUpdates() { Updater.checkInBackground(manual: true) }
 
     private func startHoverTracking() {
         trackingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
