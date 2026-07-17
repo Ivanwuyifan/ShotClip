@@ -141,15 +141,29 @@ enum Updater {
         guard let newApp = try fm.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)
             .first(where: { $0.pathExtension == "app" }) else { throw UpdateError.appNotFound }
 
+        // The apply script must live OUTSIDE `work`, otherwise it deletes itself
+        // mid-run when it removes `work`, leaving the update half-applied.
+        let scriptURL = fm.temporaryDirectory.appendingPathComponent("ShotClipApply-\(UUID().uuidString).sh")
+        let logURL = fm.temporaryDirectory.appendingPathComponent("shotclip-update.log")
+        // Replace atomically: stage next to the target, swap, only then remove the old copy.
+        // If ditto fails, the original app is left untouched.
         let script = """
         #!/bin/bash
+        exec > "\(logURL.path)" 2>&1
+        set -x
         sleep 1
+        STAGE="\(appPath).new"
+        rm -rf "$STAGE"
+        if ! ditto "\(newApp.path)" "$STAGE"; then
+            echo "ditto to stage failed"; exit 1
+        fi
         rm -rf "\(appPath)"
-        ditto "\(newApp.path)" "\(appPath)"
+        mv "$STAGE" "\(appPath)"
+        xattr -dr com.apple.quarantine "\(appPath)" 2>/dev/null || true
         rm -rf "\(work.path)"
         open "\(appPath)"
+        rm -f "\(scriptURL.path)"
         """
-        let scriptURL = work.appendingPathComponent("apply.sh")
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
 
         let applier = Process()
