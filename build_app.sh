@@ -13,9 +13,6 @@ mkdir -p "$APP/Contents/Resources"
 cp Info.plist "$APP/Contents/Info.plist"
 cp ".build/release/ShotClip" "$APP/Contents/MacOS/ShotClip"
 [ -f AppIcon.icns ] && cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-if [ ! -f MenuBarIcon.png ] && [ -f icon_1024.png ]; then
-    sips -z 44 44 icon_1024.png --out MenuBarIcon.png >/dev/null 2>&1
-fi
 [ -f MenuBarIcon.png ] && cp MenuBarIcon.png "$APP/Contents/Resources/MenuBarIcon.png"
 
 CERT="ShotClip Self-Signed"

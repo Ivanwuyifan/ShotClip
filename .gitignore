@@ -2,3 +2,4 @@
 ShotClip.app/
 *.xcodeproj
 .DS_Store
+.hermes/
