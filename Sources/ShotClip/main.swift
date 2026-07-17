@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        LaunchAtLogin.enableOnFirstRun()
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             if let iconURL = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),

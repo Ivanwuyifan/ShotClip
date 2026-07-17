@@ -25,4 +25,13 @@ enum LaunchAtLogin {
     static func toggle() {
         set(!isEnabled)
     }
+
+    private static let didAutoEnableKey = "ShotClip.didAutoEnableLoginItem"
+
+    static func enableOnFirstRun() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: didAutoEnableKey) else { return }
+        defaults.set(true, forKey: didAutoEnableKey)
+        set(true)
+    }
 }
