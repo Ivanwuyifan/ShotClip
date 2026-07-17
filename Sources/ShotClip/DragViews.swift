@@ -9,98 +9,182 @@ final class CardView: NSView, NSDraggingSource {
     weak var completion: DragCompletionDelegate?
     var onClick: (() -> Void)?
 
-    static let cardWidth: CGFloat = 190
-    static let cardHeight: CGFloat = 210
-    private let headerHeight: CGFloat = 40
+    static let cardWidth: CGFloat = 176
+    static let cardHeight: CGFloat = 196
+    private let topBar: CGFloat = 34
+    private let bottomBar: CGFloat = 24
+    private let pad: CGFloat = 12
 
     private var mouseDownAt: NSPoint = .zero
+    private var trackingArea: NSTrackingArea?
+    private var contentBox: NSView!
 
     init(item: TimelineItem) {
         self.item = item
         super.init(frame: NSRect(x: 0, y: 0, width: Self.cardWidth, height: Self.cardHeight))
         wantsLayer = true
-        layer?.cornerRadius = 12
+        layer?.cornerRadius = 14
+        layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
-        layer?.backgroundColor = NSColor.white.cgColor
+        layer?.backgroundColor = NSColor(white: 1, alpha: 0.07).cgColor
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor(white: 0, alpha: 0.08).cgColor
+        layer?.borderColor = NSColor(white: 1, alpha: 0.10).cgColor
 
-        buildHeader()
-        buildBody()
+        buildTopBar()
+        buildContent()
+        buildBottomBar()
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    private func buildHeader() {
-        let type = item.type
-        let header = NSView(frame: NSRect(x: 0, y: bounds.height - headerHeight,
-                                          width: bounds.width, height: headerHeight))
-        header.autoresizingMask = [.width, .minYMargin]
-        header.wantsLayer = true
-        header.layer?.backgroundColor = type.headerColor.cgColor
-
-        let title = NSTextField(labelWithString: type.label)
-        title.font = .systemFont(ofSize: 13, weight: .bold)
-        title.textColor = .white
-        title.frame = NSRect(x: 12, y: header.bounds.height - 22, width: bounds.width - 24, height: 16)
-        title.autoresizingMask = [.width]
-        header.addSubview(title)
-
-        let time = NSTextField(labelWithString: Store.relativeTime(item.createdAt))
-        time.font = .systemFont(ofSize: 10, weight: .medium)
-        time.textColor = NSColor(white: 1, alpha: 0.85)
-        time.frame = NSRect(x: 12, y: 5, width: bounds.width - 24, height: 12)
-        time.autoresizingMask = [.width]
-        header.addSubview(time)
-
-        addSubview(header)
+    private var typeAccent: NSColor {
+        switch item.type {
+        case .screenshot: return NSColor(red: 0.40, green: 0.82, blue: 0.72, alpha: 1)
+        case .image:      return NSColor(red: 0.48, green: 0.72, blue: 1.00, alpha: 1)
+        case .link:       return NSColor(red: 0.72, green: 0.62, blue: 1.00, alpha: 1)
+        case .text:       return NSColor(red: 0.98, green: 0.80, blue: 0.42, alpha: 1)
+        }
     }
 
-    private func buildBody() {
-        let bodyRect = NSRect(x: 0, y: 0, width: bounds.width, height: bounds.height - headerHeight)
+    private func buildTopBar() {
+        let bar = NSView(frame: NSRect(x: 0, y: bounds.height - topBar, width: bounds.width, height: topBar))
+        bar.autoresizingMask = [.width, .minYMargin]
+
+        let dot = NSView(frame: NSRect(x: pad, y: topBar/2 - 4, width: 8, height: 8))
+        dot.wantsLayer = true
+        dot.layer?.cornerRadius = 4
+        dot.layer?.backgroundColor = typeAccent.cgColor
+        // subtle glow
+        dot.layer?.shadowColor = typeAccent.cgColor
+        dot.layer?.shadowOpacity = 0.6
+        dot.layer?.shadowRadius = 3
+        dot.layer?.shadowOffset = .zero
+        bar.addSubview(dot)
+
+        let title = NSTextField(labelWithString: item.type.label)
+        title.font = .systemFont(ofSize: 11.5, weight: .semibold)
+        title.textColor = NSColor(white: 1, alpha: 0.92)
+        title.sizeToFit()
+        title.frame = NSRect(x: pad + 15, y: topBar/2 - title.frame.height/2 - 0.5,
+                             width: bounds.width - pad*2 - 15, height: title.frame.height)
+        title.autoresizingMask = [.width]
+        bar.addSubview(title)
+
+        addSubview(bar)
+    }
+
+    private func buildContent() {
+        let h = bounds.height - topBar - bottomBar
+        contentBox = NSView(frame: NSRect(x: 0, y: bottomBar, width: bounds.width, height: h))
+        contentBox.autoresizingMask = [.width, .height]
+        addSubview(contentBox)
 
         switch item {
         case .shot(let s):
-            addImageBody(s.thumbnail, in: bodyRect)
+            addImage(s.thumbnail)
             toolTip = s.url.lastPathComponent
         case .clip(let c):
             switch c.kind {
             case .image(let url):
-                addImageBody(NSImage(contentsOf: url), in: bodyRect)
+                addImage(NSImage(contentsOf: url))
             case .text(let full):
-                addTextBody(full, in: bodyRect)
+                addText(full)
                 toolTip = full
             }
         }
     }
 
-    private func addImageBody(_ image: NSImage?, in rect: NSRect) {
-        let iv = NSImageView(frame: rect.insetBy(dx: 8, dy: 8))
+    private func addImage(_ image: NSImage?) {
+        let inset: CGFloat = 12
+        let iv = NSImageView(frame: contentBox.bounds.insetBy(dx: inset, dy: 6))
         iv.autoresizingMask = [.width, .height]
         iv.imageScaling = .scaleProportionallyUpOrDown
         iv.image = image
         iv.wantsLayer = true
-        iv.layer?.cornerRadius = 6
+        iv.layer?.cornerRadius = 8
+        iv.layer?.cornerCurve = .continuous
         iv.layer?.masksToBounds = true
-        addSubview(iv)
+        iv.layer?.backgroundColor = NSColor(white: 0, alpha: 0.18).cgColor
+        iv.layer?.borderWidth = 1
+        iv.layer?.borderColor = NSColor(white: 1, alpha: 0.06).cgColor
+        contentBox.addSubview(iv)
     }
 
-    private func addTextBody(_ text: String, in rect: NSRect) {
-        let tf = NSTextField(wrappingLabelWithString: text)
-        tf.font = .systemFont(ofSize: 12)
-        tf.textColor = NSColor(white: 0.15, alpha: 1)
-        tf.maximumNumberOfLines = 8
+    private func addText(_ text: String) {
+        let tf = NSTextField(wrappingLabelWithString: text.trimmingCharacters(in: .whitespacesAndNewlines))
+        tf.font = .systemFont(ofSize: 12.5, weight: .regular)
+        tf.textColor = NSColor(white: 1, alpha: 0.82)
+        tf.maximumNumberOfLines = 6
         tf.lineBreakMode = .byTruncatingTail
         tf.isEditable = false
         tf.isSelectable = false
         tf.drawsBackground = false
         tf.isBezeled = false
-        tf.frame = rect.insetBy(dx: 12, dy: 10)
+        tf.frame = contentBox.bounds.insetBy(dx: pad, dy: 8)
         tf.autoresizingMask = [.width, .height]
-        addSubview(tf)
+        contentBox.addSubview(tf)
+    }
+
+    private func buildBottomBar() {
+        let time = NSTextField(labelWithString: Store.relativeTime(item.createdAt))
+        time.font = .systemFont(ofSize: 10, weight: .medium)
+        time.textColor = NSColor(white: 1, alpha: 0.38)
+        time.frame = NSRect(x: pad, y: 7, width: bounds.width - pad*2, height: 12)
+        time.autoresizingMask = [.width]
+        addSubview(time)
+    }
+
+    // MARK: - Hover
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let ta = trackingArea { removeTrackingArea(ta) }
+        let ta = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways],
+                                owner: self, userInfo: nil)
+        addTrackingArea(ta)
+        trackingArea = ta
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.12
+            layer?.backgroundColor = NSColor(white: 1, alpha: 0.13).cgColor
+            layer?.borderColor = typeAccent.withAlphaComponent(0.55).cgColor
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            layer?.backgroundColor = NSColor(white: 1, alpha: 0.07).cgColor
+            layer?.borderColor = NSColor(white: 1, alpha: 0.10).cgColor
+        }
     }
 
     // MARK: - Interaction
+
+    // 让整张卡接管点击：子视图（NSImageView/NSTextField）不拦截，
+    // 否则图片卡的 NSImageView 会吃掉第一次点击，导致要双击。
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let p = convert(point, from: superview)
+        return bounds.contains(p) ? self : nil
+    }
+
+    func flashCopied() {
+        layer?.removeAllAnimations()
+        layer?.borderColor = typeAccent.cgColor
+        layer?.borderWidth = 2.5
+        layer?.backgroundColor = typeAccent.withAlphaComponent(0.22).cgColor
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.4
+            layer?.borderColor = NSColor(white: 1, alpha: 0.10).cgColor
+            layer?.borderWidth = 1
+            layer?.backgroundColor = NSColor(white: 1, alpha: 0.07).cgColor
+        }
+    }
+
+    // 面板是 nonactivatingPanel，不接管首点会导致第一次点击被吞、需点两下。
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         mouseDownAt = event.locationInWindow

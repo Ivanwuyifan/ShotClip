@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let overlay = OverlayWindow()
     private var trackingTimer: Timer?
+    private var sendPanel: SendPanel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -34,6 +35,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         ClipboardMonitor.shared.start()
+
+        Capture.onCaptured = { [weak self] url in
+            // 截图完成后自动放进剪贴板，可直接 ⌘V 粘出图。
+            // suppressNext 避免剪贴板监听把这张图当作新剪贴项重复入库。
+            ClipboardMonitor.shared.suppressNext()
+            Sender.copyImage(url)
+
+            let panel = SendPanel(imageURL: url)
+            self?.sendPanel = panel
+            panel.present()
+        }
 
         HotkeyManager.shared.start()
         // ⌘⇧Space -> show bar. keycode 49 = space
