@@ -6,8 +6,8 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
     private let scroll = NSScrollView()
 
     init() {
-        let w: CGFloat = 980
-        let h: CGFloat = 262
+        let w: CGFloat = 940
+        let h: CGFloat = 268
         super.init(contentRect: NSRect(x: 0, y: 0, width: w, height: h),
                    styleMask: [.nonactivatingPanel, .borderless],
                    backing: .buffered, defer: false)
@@ -17,14 +17,19 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
         isOpaque = false
         hasShadow = true
         hidesOnDeactivate = false
+        appearance = NSAppearance(named: .vibrantDark)
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         isMovableByWindowBackground = false
 
         let container = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: w, height: h))
         container.material = .hudWindow
+        container.blendingMode = .behindWindow
         container.state = .active
         container.wantsLayer = true
-        container.layer?.cornerRadius = 18
+        container.layer?.cornerRadius = 22
+        container.layer?.cornerCurve = .continuous
+        container.layer?.borderWidth = 1
+        container.layer?.borderColor = NSColor(white: 1, alpha: 0.08).cgColor
         container.autoresizingMask = [.width, .height]
         contentView = container
 
@@ -32,10 +37,22 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
     }
 
     private func setupRow(in container: NSView) {
+        let titleLabel = NSTextField(labelWithString: "ShotClip")
+        titleLabel.font = .systemFont(ofSize: 11, weight: .bold)
+        titleLabel.textColor = NSColor(white: 1, alpha: 0.55)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(titleLabel)
+
+        let hint = NSTextField(labelWithString: "drag out · click to copy")
+        hint.font = .systemFont(ofSize: 10.5, weight: .medium)
+        hint.textColor = NSColor(white: 1, alpha: 0.30)
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(hint)
+
         row.orientation = .horizontal
         row.spacing = 14
         row.alignment = .centerY
-        row.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
+        row.edgeInsets = NSEdgeInsets(top: 0, left: 2, bottom: 0, right: 2)
 
         scroll.drawsBackground = false
         scroll.hasHorizontalScroller = false
@@ -47,10 +64,15 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
 
         row.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
+            hint.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -24),
+            hint.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+
             scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
             scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -22),
-            scroll.topAnchor.constraint(equalTo: container.topAnchor, constant: 24),
-            scroll.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -24),
+            scroll.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            scroll.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -18),
             row.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
             row.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
             row.bottomAnchor.constraint(equalTo: scroll.contentView.bottomAnchor),
@@ -66,7 +88,7 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
         if items.isEmpty {
             let l = NSTextField(labelWithString: "Nothing yet — press ⌘⇧4 to capture, or copy something")
             l.font = .systemFont(ofSize: 13)
-            l.textColor = .tertiaryLabelColor
+            l.textColor = NSColor(white: 1, alpha: 0.4)
             row.addArrangedSubview(l)
             return
         }
@@ -74,14 +96,17 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
         for item in items {
             let card = CardView(item: item)
             card.completion = self
-            card.onClick = { [weak self] in self?.recopy(item) }
+            card.onClick = { [weak self, weak card] in
+                guard let card = card else { return }
+                self?.recopy(item, card: card)
+            }
             card.widthAnchor.constraint(equalToConstant: CardView.cardWidth).isActive = true
             card.heightAnchor.constraint(equalToConstant: CardView.cardHeight).isActive = true
             row.addArrangedSubview(card)
         }
     }
 
-    private func recopy(_ item: TimelineItem) {
+    private func recopy(_ item: TimelineItem, card: CardView) {
         ClipboardMonitor.shared.suppressNext()
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -95,14 +120,9 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
                 if let img = NSImage(contentsOf: url) { pb.writeObjects([img]) }
             }
         }
-        flash()
-    }
-
-    private func flash() {
-        contentView?.layer?.borderWidth = 2.5
-        contentView?.layer?.borderColor = NSColor.controlAccentColor.cgColor
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            self?.contentView?.layer?.borderWidth = 0
+        card.flashCopied()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.hide()
         }
     }
 
