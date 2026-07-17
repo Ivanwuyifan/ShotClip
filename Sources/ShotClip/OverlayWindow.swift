@@ -121,7 +121,7 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
             }
         }
         card.flashCopied()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
             self?.hide()
         }
     }

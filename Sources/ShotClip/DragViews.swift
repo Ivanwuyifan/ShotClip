@@ -171,15 +171,79 @@ final class CardView: NSView, NSDraggingSource {
     }
 
     func flashCopied() {
-        layer?.removeAllAnimations()
-        layer?.borderColor = typeAccent.cgColor
-        layer?.borderWidth = 2.5
-        layer?.backgroundColor = typeAccent.withAlphaComponent(0.22).cgColor
+        guard let layer = layer else { return }
+        layer.removeAllAnimations()
+
+        // 1) 明显的类型色发光边框 + 背景染色
+        layer.borderColor = typeAccent.cgColor
+        layer.borderWidth = 3
+        layer.backgroundColor = typeAccent.withAlphaComponent(0.30).cgColor
+        layer.shadowColor = typeAccent.cgColor
+        layer.shadowOpacity = 0.9
+        layer.shadowRadius = 16
+        layer.shadowOffset = .zero
+        layer.masksToBounds = false
+
+        // 2) 缩放脉冲
+        let pulse = CABasicAnimation(keyPath: "transform.scale")
+        pulse.fromValue = 1.0
+        pulse.toValue = 1.05
+        pulse.autoreverses = true
+        pulse.duration = 0.16
+        layer.add(pulse, forKey: "pulse")
+
+        // 3) 中央 "✓ Copied" 浮层
+        showCopiedBadge()
+
+        // 4) 恢复
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.4
-            layer?.borderColor = NSColor(white: 1, alpha: 0.10).cgColor
-            layer?.borderWidth = 1
-            layer?.backgroundColor = NSColor(white: 1, alpha: 0.07).cgColor
+            ctx.duration = 0.7
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.borderColor = NSColor(white: 1, alpha: 0.10).cgColor
+            layer.borderWidth = 1
+            layer.backgroundColor = NSColor(white: 1, alpha: 0.07).cgColor
+            layer.shadowOpacity = 0
+        } completionHandler: { [weak self] in
+            self?.layer?.masksToBounds = true
+        }
+    }
+
+    private func showCopiedBadge() {
+        let badge = NSView()
+        badge.wantsLayer = true
+        badge.layer?.backgroundColor = typeAccent.cgColor
+        badge.layer?.cornerRadius = 13
+        badge.layer?.cornerCurve = .continuous
+        badge.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(labelWithString: "✓ Copied")
+        label.font = .systemFont(ofSize: 12, weight: .bold)
+        label.textColor = NSColor(white: 0.08, alpha: 1)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        badge.addSubview(label)
+
+        addSubview(badge)
+        NSLayoutConstraint.activate([
+            badge.centerXAnchor.constraint(equalTo: centerXAnchor),
+            badge.centerYAnchor.constraint(equalTo: centerYAnchor),
+            badge.heightAnchor.constraint(equalToConstant: 26),
+            label.centerXAnchor.constraint(equalTo: badge.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: badge.centerYAnchor),
+            badge.widthAnchor.constraint(equalTo: label.widthAnchor, constant: 22),
+        ])
+
+        badge.alphaValue = 0
+        badge.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.8, y: 0.8))
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.12
+            badge.animator().alphaValue = 1
+            badge.layer?.setAffineTransform(.identity)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.25
+                badge.animator().alphaValue = 0
+            } completionHandler: { badge.removeFromSuperview() }
         }
     }
 
