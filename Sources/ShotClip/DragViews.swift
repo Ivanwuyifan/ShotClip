@@ -163,8 +163,6 @@ final class CardView: NSView, NSDraggingSource {
 
     // MARK: - Interaction
 
-    // 让整张卡接管点击：子视图（NSImageView/NSTextField）不拦截，
-    // 否则图片卡的 NSImageView 会吃掉第一次点击，导致要双击。
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
         return bounds.contains(p) ? self : nil
@@ -174,7 +172,6 @@ final class CardView: NSView, NSDraggingSource {
         guard let layer = layer else { return }
         layer.removeAllAnimations()
 
-        // 1) 明显的类型色发光边框 + 背景染色
         layer.borderColor = typeAccent.cgColor
         layer.borderWidth = 3
         layer.backgroundColor = typeAccent.withAlphaComponent(0.30).cgColor
@@ -184,7 +181,6 @@ final class CardView: NSView, NSDraggingSource {
         layer.shadowOffset = .zero
         layer.masksToBounds = false
 
-        // 2) 缩放脉冲
         let pulse = CABasicAnimation(keyPath: "transform.scale")
         pulse.fromValue = 1.0
         pulse.toValue = 1.05
@@ -192,10 +188,8 @@ final class CardView: NSView, NSDraggingSource {
         pulse.duration = 0.16
         layer.add(pulse, forKey: "pulse")
 
-        // 3) 中央 "✓ Copied" 浮层
         showCopiedBadge()
 
-        // 4) 恢复
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.7
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -247,7 +241,6 @@ final class CardView: NSView, NSDraggingSource {
         }
     }
 
-    // 面板是 nonactivatingPanel，不接管首点会导致第一次点击被吞、需点两下。
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {

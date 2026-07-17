@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let overlay = OverlayWindow()
     private var trackingTimer: Timer?
     private var sendPanel: SendPanel?
+    private weak var launchItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -25,7 +26,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Show bar (⌘⇧Space)", action: #selector(showOverlay), keyEquivalent: "")
         menu.addItem(withTitle: "Capture region (⌘⇧4)", action: #selector(capture), keyEquivalent: "")
         menu.addItem(.separator())
+        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.state = LaunchAtLogin.isEnabled ? .on : .off
+        launchItem = loginItem
+        menu.addItem(loginItem)
         menu.addItem(withTitle: "Check for Updates…", action: #selector(checkUpdates), keyEquivalent: "")
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Quit ShotClip", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
 
@@ -37,14 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         ClipboardMonitor.shared.start()
 
-        // 启动 3 秒后静默检查 GitHub 是否有新版
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             Updater.checkInBackground()
         }
 
         Capture.onCaptured = { [weak self] url in
-            // 截图完成后自动放进剪贴板，可直接 ⌘V 粘出图。
-            // suppressNext 避免剪贴板监听把这张图当作新剪贴项重复入库。
             ClipboardMonitor.shared.suppressNext()
             Sender.copyImage(url)
 
@@ -73,6 +76,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showOverlay() { overlay.toggle() }
     @objc private func capture() { Capture.interactiveRegion() }
     @objc private func checkUpdates() { Updater.checkInBackground(manual: true) }
+
+    @objc private func toggleLaunchAtLogin() {
+        LaunchAtLogin.toggle()
+        launchItem?.state = LaunchAtLogin.isEnabled ? .on : .off
+    }
 
     private func startHoverTracking() {
         trackingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in

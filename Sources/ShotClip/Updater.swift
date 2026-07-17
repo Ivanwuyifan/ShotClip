@@ -8,7 +8,6 @@ enum Updater {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
     }
 
-    // 静默检查，有新版才弹提示。manual=true 时即使已是最新也提示。
     static func checkInBackground(manual: Bool = false) {
         guard let url = URL(string: apiURL) else { return }
         var req = URLRequest(url: url)
@@ -18,7 +17,7 @@ enum Updater {
             guard let data = data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tag = json["tag_name"] as? String else {
-                if manual { DispatchQueue.main.async { showError("检查更新失败，请稍后再试。") } }
+                if manual { DispatchQueue.main.async { showError("Couldn't check for updates. Please try again later.") } }
                 return
             }
             let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
@@ -26,8 +25,8 @@ enum Updater {
                 if manual {
                     DispatchQueue.main.async {
                         let a = NSAlert()
-                        a.messageText = "已是最新版本"
-                        a.informativeText = "ShotClip \(currentVersion) 已经是最新的了。"
+                        a.messageText = "You're up to date"
+                        a.informativeText = "ShotClip \(currentVersion) is the latest version."
                         NSApp.activate(ignoringOtherApps: true)
                         a.runModal()
                     }
@@ -46,7 +45,6 @@ enum Updater {
         }.resume()
     }
 
-    // 语义版本比较：latest > current 返回 true
     static func isNewer(_ latest: String, than current: String) -> Bool {
         let l = latest.split(separator: ".").map { Int($0) ?? 0 }
         let c = current.split(separator: ".").map { Int($0) ?? 0 }
@@ -60,11 +58,11 @@ enum Updater {
 
     private static func promptUpdate(version: String, notes: String, zipURLString: String?) {
         let alert = NSAlert()
-        alert.messageText = "ShotClip \(version) 可用"
-        alert.informativeText = "当前版本 \(currentVersion)。\n\n\(notes.prefix(300))"
-        alert.addButton(withTitle: "更新并重启")
-        alert.addButton(withTitle: "打开发布页")
-        alert.addButton(withTitle: "以后再说")
+        alert.messageText = "ShotClip \(version) is available"
+        alert.informativeText = "Current version \(currentVersion).\n\n\(notes.prefix(300))"
+        alert.addButton(withTitle: "Update & Restart")
+        alert.addButton(withTitle: "Open Release Page")
+        alert.addButton(withTitle: "Later")
         NSApp.activate(ignoringOtherApps: true)
         switch alert.runModal() {
         case .alertFirstButtonReturn:
@@ -89,13 +87,13 @@ enum Updater {
     private static func downloadAndInstall(_ url: URL) {
         let task = URLSession.shared.downloadTask(with: url) { tmp, _, err in
             guard let tmp = tmp, err == nil else {
-                DispatchQueue.main.async { showError("下载失败：\(err?.localizedDescription ?? "未知错误")") }
+                DispatchQueue.main.async { showError("Download failed: \(err?.localizedDescription ?? "unknown error")") }
                 return
             }
             do {
                 try install(zipAt: tmp)
             } catch {
-                DispatchQueue.main.async { showError("安装失败：\(error.localizedDescription)") }
+                DispatchQueue.main.async { showError("Install failed: \(error.localizedDescription)") }
             }
         }
         task.resume()
@@ -109,18 +107,15 @@ enum Updater {
         let work = fm.temporaryDirectory.appendingPathComponent("ShotClipUpdate-\(UUID().uuidString)")
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
 
-        // 解压
         let unzip = Process()
         unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         unzip.arguments = ["-x", "-k", tmpZip.path, work.path]
         try unzip.run(); unzip.waitUntilExit()
         guard unzip.terminationStatus == 0 else { throw UpdateError.unzipFailed }
 
-        // 找到解压出来的 ShotClip.app
         guard let newApp = try fm.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)
             .first(where: { $0.pathExtension == "app" }) else { throw UpdateError.appNotFound }
 
-        // 用外部脚本替换并重启（App 不能替换正在运行的自己）
         let script = """
         #!/bin/bash
         sleep 1
@@ -145,10 +140,10 @@ enum Updater {
 
     private static func showError(_ msg: String) {
         let a = NSAlert()
-        a.messageText = "更新出错"
-        a.informativeText = msg + "\n\n可到发布页手动下载。"
-        a.addButton(withTitle: "打开发布页")
-        a.addButton(withTitle: "好")
+        a.messageText = "Update error"
+        a.informativeText = msg + "\n\nYou can download manually from the release page."
+        a.addButton(withTitle: "Open Release Page")
+        a.addButton(withTitle: "OK")
         if a.runModal() == .alertFirstButtonReturn { openReleasePage() }
     }
 
@@ -156,8 +151,8 @@ enum Updater {
         case unzipFailed, appNotFound
         var errorDescription: String? {
             switch self {
-            case .unzipFailed: return "解压失败"
-            case .appNotFound: return "更新包里找不到 ShotClip.app"
+            case .unzipFailed: return "Failed to unzip the update"
+            case .appNotFound: return "ShotClip.app not found in the update package"
             }
         }
     }
