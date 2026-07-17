@@ -489,6 +489,11 @@ final class AnnotatorWindow: NSWindow, NSWindowDelegate {
         ocr.action = #selector(runOCR)
         stack.addArrangedSubview(ocr)
 
+        let scroll = toolButton(symbol: "arrow.up.and.down.square", help: "Scrolling Capture — select a region and scroll")
+        scroll.target = self
+        scroll.action = #selector(startScrollCapture)
+        stack.addArrangedSubview(scroll)
+
         stack.addArrangedSubview(separator())
 
         let undo = toolButton(symbol: "arrow.uturn.backward", help: "Undo")
@@ -623,8 +628,16 @@ final class AnnotatorWindow: NSWindow, NSWindowDelegate {
     }
 
     @objc private func startScrollCapture() {
+        canvas.commitActiveText()
+        // Hide the editor so it doesn't cover the full-screen selection overlay.
+        orderOut(nil)
         onScrollCapture?({ [weak self] stitched in
-            guard let self = self, let img = stitched else { return }
+            guard let self = self else { return }
+            guard let img = stitched else {
+                // cancelled — bring the editor back
+                self.makeKeyAndOrderFront(nil)
+                return
+            }
             let out = self.exportImage(img)
             self.close()
             self.onDone?(out)

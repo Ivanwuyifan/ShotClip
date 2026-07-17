@@ -16,11 +16,13 @@ A menu-bar macOS app that gives you a hotkey-summoned card wall at the bottom of
   - **Mosaic** is a brush — hold and drag, and everything the stroke passes over is pixellated (blur out sensitive info).
   - **Text** — click to type; switching colour while editing recolours the text you're typing.
   - **OCR** — recognise text in the shot (offline, macOS Vision; Chinese + English) and copy it to the clipboard.
+  - **Scrolling Capture** — select a region and scroll manually; ShotClip grabs frames and stitches them into one tall image.
   - **Undo** (⌘Z), **Save to file**, **✓ Done** (copy + send), **✕ Cancel** (Esc / Return to finish).
   - Small screenshots keep their original size — the editor centers them with a black letterbox instead of stretching. The exported image has no letterbox.
   - The editor window only moves by its title bar — dragging on the image draws, it doesn't move the window.
+- **Scrolling Capture** — also available directly from the menu bar (**Scrolling Capture…**): select a region, scroll the content yourself, and ShotClip stitches it into a long image. Needs only Screen Recording (no synthetic scrolling).
 - **Permissions & Setup guide** — on first launch a welcome window explains the app and lets you grant each permission with one click (Screen Recording, Accessibility, and freeing up ⌘⇧4). Reopen it any time from the menu bar → **Permissions & Setup…**.
-- **⌘⇧Space** — toggle the bottom card wall.
+- **⌘⇧Space** — toggle the bottom card wall (click anywhere outside it to dismiss).
 - One scrolling row, screenshots and clipboard mixed, newest first:
   - 🟢 **Screenshot** — screenshot thumbnail
   - 🔵 **Image** — copied image
@@ -50,9 +52,9 @@ cd ShotClip
 open ShotClip.app
 ```
 
-A ShotClip icon appears in the menu bar with **Show bar / Capture region / Edit mode / Permissions & Setup / Check for Updates / Quit**.
+A ShotClip icon appears in the menu bar with **Show bar / Capture region / Scrolling Capture / Edit mode / Permissions & Setup / Check for Updates / Quit**.
 
-> Or grab the packaged `ShotClip.app.zip` from [Releases](https://github.com/Ivanwuyifan/ShotClip/releases/latest). It's self-signed, so on first launch right-click → Open.
+> Or grab the packaged `ShotClip.app.zip` from [Releases](https://github.com/Ivanwuyifan/ShotClip/releases/latest). The zip contains `ShotClip.app` and **`install.command`** — double-click `install.command` to copy it into Applications, clear the quarantine flag, and launch it (this avoids the "unidentified developer / damaged" prompt for the self-signed build, and lets self-update work). Or move `ShotClip.app` into Applications yourself and right-click → Open on first launch.
 
 ## First-run system settings
 
@@ -105,6 +107,9 @@ If a leftover **ShotClip** entry remains in *System Settings → General → Log
 | `Capture.swift` | Runs `screencapture -i`, hands the shot to the annotator |
 | `Annotator.swift` | Annotation editor window, toolbar, shapes / pen / text / brush-mosaic, letterbox layout, render & export |
 | `OCR.swift` | Vision text recognition (offline, zh + en) |
+| `ScreenGrabber.swift` | Region capture — ScreenCaptureKit (14+) with CGWindowList fallback (13) |
+| `ScrollCapture.swift` | Scrolling capture: region select, manual-scroll frame grab, live control bar |
+| `Stitcher.swift` | Incremental frame stitching with fixed-header detection + robust overlap |
 | `Onboarding.swift` | First-run welcome + permissions guide (screen recording / accessibility / shortcut) |
 | `Hotkeys.swift` | Carbon global hotkeys (no Accessibility permission) |
 | `DragViews.swift` | Card views; per-type drag / click routing; copy highlight |
@@ -136,11 +141,12 @@ If a leftover **ShotClip** entry remains in *System Settings → General → Log
   - **马赛克是画笔** — 按住拖动,笔刷经过的地方被打码(遮住敏感信息)。
   - **文字** — 点一下开始打字;打字过程中切颜色,正在编辑的文字会跟着变色。
   - **OCR** — 识别截图里的文字(离线,macOS Vision,中英文),复制到剪贴板。
+  - **长截图** — 框一个区域,自己手动往下滚,ShotClip 逐帧抓取拼成一张长图。也可从菜单栏「Scrolling Capture…」直接进入。只需屏幕录制权限(不合成滚轮)。
   - **撤销**(⌘Z)、**保存到文件**、**✓ 完成**(复制 + 发送)、**✕ 取消**(Esc / 回车完成)。
   - 小截图保持原尺寸 —— 编辑器用黑色边框居中显示,不拉伸;导出的图没有黑边。
   - 编辑器窗口只能拖标题栏移动 —— 在图上拖是画标注,不会拖走窗口。
 - **权限引导** — 首次启动弹一个欢迎窗,说明功能并一键授权各项权限(屏幕录制、辅助功能、释放 ⌘⇧4)。之后随时可从菜单栏 → **Permissions & Setup…** 重新打开。
-- **⌘⇧Space** — 呼出/隐藏底部卡片墙。
+- **⌘⇧Space** — 呼出/隐藏底部卡片墙(点它以外的区域即可关闭)。
 - 单行卡片墙,截图和剪贴板混排,按时间倒序:
   - 🟢 **Screenshot** — 截图缩略图
   - 🔵 **Image** — 复制的图片
@@ -172,7 +178,7 @@ open ShotClip.app
 
 菜单栏会出现 ShotClip 图标,点它有「Show bar / Capture region / Edit mode / Permissions & Setup / Check for Updates / Quit」菜单。
 
-> 也可以从 [Releases](https://github.com/Ivanwuyifan/ShotClip/releases/latest) 下载打包好的 `ShotClip.app.zip`。自签名 App,首次打开需右键 → 打开。
+> 也可以从 [Releases](https://github.com/Ivanwuyifan/ShotClip/releases/latest) 下载打包好的 `ShotClip.app.zip`。里面含 `ShotClip.app` 和 **`install.command`** —— 双击 `install.command` 会自动拷进 Applications、清除隔离属性、打开(自签名 App 借此免掉「身份不明/已损坏」提示,也让自动更新正常)。或自己把 `ShotClip.app` 拖进 Applications,首次右键 → 打开。
 
 ## 首次使用需要的系统设置
 
@@ -225,6 +231,9 @@ ShotClip 用 ⌘⇧4 作为截图键,会和系统原生截图冲突。到
 | `Capture.swift` | 调 `screencapture -i` 截图,交给标注器 |
 | `Annotator.swift` | 标注编辑器窗口、工具栏、图形/画笔/文字/画笔马赛克、letterbox 布局、渲染导出 |
 | `OCR.swift` | Vision 文字识别(离线,中 + 英) |
+| `ScreenGrabber.swift` | 区域截屏 —— ScreenCaptureKit(14+),CGWindowList 回退(13) |
+| `ScrollCapture.swift` | 长截图:框选、手动滚逐帧抓取、实时控制条 |
+| `Stitcher.swift` | 逐帧增量拼接,固定表头检测 + 鲁棒重叠对齐 |
 | `Onboarding.swift` | 首次启动欢迎窗 + 权限引导(屏幕录制/辅助功能/快捷键) |
 | `Hotkeys.swift` | Carbon 全局热键(无需辅助功能权限) |
 | `DragViews.swift` | 卡片视图,按类型分发拖拽 / 点击,复制高亮 |

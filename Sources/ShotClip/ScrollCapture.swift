@@ -1,28 +1,136 @@
 import AppKit
-import CoreGraphics
 
-final class RegionSelectWindow: NSWindow {
+// Scrolling capture, method B: select a region, then the USER scrolls manually
+// while ShotClip grabs frames and stitches them live. No synthetic scroll events,
+// so only Screen Recording permission is needed (no Accessibility).
+
+enum ScrollCapture {
+    private static var controller: ScrollCaptureController?
+
+    static func begin(completion: @escaping (NSImage?) -> Void) {
+        guard let screen = NSScreen.main else { completion(nil); return }
+        let c = ScrollCaptureController(screen: screen) { image in
+            controller = nil
+            completion(image)
+        }
+        controller = c
+        c.start()
+    }
+}
+
+private final class ScrollCaptureController {
+    private let screen: NSScreen
+    private let completion: (NSImage?) -> Void
+    private let selectWindow: ScrollRegionSelectWindow
+    private var captureWindow: ScrollCaptureWindow?
+    private var borderWindow: SelectionBorderWindow?
+
+    init(screen: NSScreen, completion: @escaping (NSImage?) -> Void) {
+        self.screen = screen
+        self.completion = completion
+        self.selectWindow = ScrollRegionSelectWindow(targetScreen: screen)
+    }
+
+    func start() {
+        selectWindow.onCancel = { [weak self] in
+            self?.selectWindow.orderOut(nil)
+            self?.completion(nil)
+        }
+        selectWindow.onSelected = { [weak self] regionGlobal in
+            guard let self = self else { return }
+            self.selectWindow.orderOut(nil)
+            self.beginCapture(regionGlobal: regionGlobal)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        selectWindow.makeKeyAndOrderFront(nil)
+    }
+
+    private func beginCapture(regionGlobal: CGRect) {
+        let grabber = ScreenGrabber(screen: screen, regionGlobal: regionGlobal)
+        // Border overlay marks the region being captured; it ignores mouse so the
+        // user can still scroll the content underneath.
+        let border = SelectionBorderWindow(regionGlobal: regionGlobal)
+        borderWindow = border
+        border.orderFrontRegardless()
+
+        let win = ScrollCaptureWindow(targetScreen: screen, regionGlobal: regionGlobal, grabber: grabber)
+        captureWindow = win
+        let teardown: (NSImage?) -> Void = { [weak self] image in
+            self?.captureWindow?.orderOut(nil)
+            self?.captureWindow = nil
+            self?.borderWindow?.orderOut(nil)
+            self?.borderWindow = nil
+            self?.completion(image)
+        }
+        win.onDone = { image in teardown(image) }
+        win.onCancel = { teardown(nil) }
+        win.makeKeyAndOrderFront(nil)
+        win.startGrabbing()
+    }
+}
+
+// Draws just a border around the capture region. Transparent center, click-through.
+final class SelectionBorderWindow: NSWindow {
+    init(regionGlobal: CGRect) {
+        let inset: CGFloat = 3
+        let frame = regionGlobal.insetBy(dx: -inset, dy: -inset)
+        super.init(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        level = .screenSaver
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = false
+        ignoresMouseEvents = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+
+        let v = NSView(frame: CGRect(origin: .zero, size: frame.size))
+        v.wantsLayer = true
+        v.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        v.layer?.borderWidth = inset
+        v.layer?.cornerRadius = 2
+        contentView = v
+    }
+
+    override var canBecomeKey: Bool { false }
+}
+
+// MARK: - Region selection (single targetScreen, correct coordinates)
+
+final class ScrollRegionSelectWindow: NSWindow {
     private var startPoint: CGPoint?
     private var currentRect = CGRect.zero
     private let selectionLayer = CAShapeLayer()
-    var onSelected: ((CGRect) -> Void)?
+    private let dimLayer = CAShapeLayer()
+    private let hintLabel = NSTextField(labelWithString: "Drag to select the scroll area, then scroll manually")
+    var onSelected: ((CGRect) -> Void)?     // region in AppKit global coords
     var onCancel: (() -> Void)?
 
-    init(screen: NSScreen) {
-        super.init(contentRect: screen.frame,
-                   styleMask: [.borderless],
-                   backing: .buffered, defer: false)
+    private let targetScreen: NSScreen
+
+    init(targetScreen: NSScreen) {
+        self.targetScreen = targetScreen
+        super.init(contentRect: targetScreen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         level = .screenSaver
         backgroundColor = NSColor(white: 0, alpha: 0.28)
         isOpaque = false
-        ignoresMouseEvents = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        let view = NSView(frame: screen.frame)
+
+        let view = NSView(frame: CGRect(origin: .zero, size: targetScreen.frame.size))
         view.wantsLayer = true
-        selectionLayer.fillColor = NSColor(white: 1, alpha: 0.12).cgColor
+        selectionLayer.fillColor = NSColor(white: 1, alpha: 0.10).cgColor
         selectionLayer.strokeColor = NSColor.controlAccentColor.cgColor
         selectionLayer.lineWidth = 2
         view.layer?.addSublayer(selectionLayer)
+
+        hintLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        hintLabel.textColor = .white
+        hintLabel.drawsBackground = true
+        hintLabel.backgroundColor = NSColor(white: 0, alpha: 0.5)
+        hintLabel.isBezeled = false
+        hintLabel.isEditable = false
+        hintLabel.sizeToFit()
+        hintLabel.frame.origin = CGPoint(x: targetScreen.frame.width/2 - hintLabel.frame.width/2,
+                                         y: targetScreen.frame.height - 80)
+        view.addSubview(hintLabel)
         contentView = view
     }
 
@@ -30,6 +138,7 @@ final class RegionSelectWindow: NSWindow {
 
     override func mouseDown(with event: NSEvent) {
         startPoint = event.locationInWindow
+        hintLabel.isHidden = true
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -41,11 +150,12 @@ final class RegionSelectWindow: NSWindow {
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard currentRect.width > 20, currentRect.height > 20 else {
-            onCancel?()
-            return
-        }
-        onSelected?(currentRect)
+        guard currentRect.width > 40, currentRect.height > 40 else { onCancel?(); return }
+        // window is at targetScreen.frame; window coords == targetScreen-local. Convert to global.
+        let global = CGRect(x: targetScreen.frame.minX + currentRect.minX,
+                            y: targetScreen.frame.minY + currentRect.minY,
+                            width: currentRect.width, height: currentRect.height)
+        onSelected?(global)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -53,171 +163,137 @@ final class RegionSelectWindow: NSWindow {
     }
 }
 
-enum ScrollCapture {
-    private static var window: RegionSelectWindow?
+// MARK: - Capture window: shows a control bar, grabs frames, stitches live
 
-    static func begin(completion: @escaping (NSImage?) -> Void) {
-        guard let screen = NSScreen.main else { completion(nil); return }
-        let win = RegionSelectWindow(screen: screen)
-        window = win
-        win.onCancel = {
-            win.orderOut(nil)
-            window = nil
-            completion(nil)
-        }
-        win.onSelected = { rectInWindow in
-            win.orderOut(nil)
-            window = nil
-            let screenRect = CGRect(x: screen.frame.minX + rectInWindow.minX,
-                                    y: screen.frame.minY + rectInWindow.minY,
-                                    width: rectInWindow.width, height: rectInWindow.height)
-            runScrollAndStitch(screenRect: screenRect, screen: screen, completion: completion)
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        win.makeKeyAndOrderFront(nil)
+final class ScrollCaptureWindow: NSWindow {
+    private let targetScreen: NSScreen
+    private let regionGlobal: CGRect
+    private let grabber: ScreenGrabber
+    private let stitcher = Stitcher()
+    private var timer: Timer?
+    private var grabbing = false
+    private let statusLabel = NSTextField(labelWithString: "0 frames")
+
+    var onDone: ((NSImage?) -> Void)?
+    var onCancel: (() -> Void)?
+
+    init(targetScreen: NSScreen, regionGlobal: CGRect, grabber: ScreenGrabber) {
+        self.targetScreen = targetScreen
+        self.regionGlobal = regionGlobal
+        self.grabber = grabber
+        // Control bar window, placed just below the selected region (or above if no room).
+        let barW: CGFloat = 300, barH: CGFloat = 52
+        var x = regionGlobal.midX - barW / 2
+        x = min(max(x, targetScreen.frame.minX + 8), targetScreen.frame.maxX - barW - 8)
+        var y = regionGlobal.minY - barH - 12
+        if y < targetScreen.frame.minY + 8 { y = regionGlobal.maxY + 12 }
+        super.init(contentRect: CGRect(x: x, y: y, width: barW, height: barH),
+                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        level = .screenSaver
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        buildBar(width: barW, height: barH)
     }
 
-    private static func runScrollAndStitch(screenRect: CGRect, screen: NSScreen,
-                                           completion: @escaping (NSImage?) -> Void) {
-        let cgRect = flipToCG(screenRect, screen: screen)
-        DispatchQueue.global(qos: .userInitiated).async {
-            var frames: [CGImage] = []
-            let maxSteps = 40
-            let scrollAmount: Int32 = -Int32(cgRect.height * 0.75)
-            var previous: CGImage?
-            var duplicateStreak = 0
+    override var canBecomeKey: Bool { true }
 
-            for _ in 0..<maxSteps {
-                guard let frame = grab(cgRect) else { break }
-                if let prev = previous, imagesEqual(prev, frame) {
-                    duplicateStreak += 1
-                    if duplicateStreak >= 2 { break }
-                } else {
-                    duplicateStreak = 0
-                    frames.append(frame)
-                    previous = frame
+    private func buildBar(width: CGFloat, height: CGFloat) {
+        let bg = NSVisualEffectView(frame: CGRect(x: 0, y: 0, width: width, height: height))
+        bg.material = .hudWindow
+        bg.blendingMode = .behindWindow
+        bg.state = .active
+        bg.wantsLayer = true
+        bg.layer?.cornerRadius = 12
+        bg.layer?.cornerCurve = .continuous
+        bg.autoresizingMask = [.width, .height]
+        contentView = bg
+
+        statusLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        statusLabel.textColor = .white
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        bg.addSubview(statusLabel)
+
+        let cancel = makeButton("xmark", "Cancel", #selector(cancelTapped), tint: .systemRed)
+        let done = makeButton("checkmark", "Done", #selector(doneTapped), tint: .systemGreen)
+        let stack = NSStackView(views: [cancel, done])
+        stack.orientation = .horizontal
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        bg.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            statusLabel.leadingAnchor.constraint(equalTo: bg.leadingAnchor, constant: 14),
+            statusLabel.centerYAnchor.constraint(equalTo: bg.centerYAnchor),
+            stack.trailingAnchor.constraint(equalTo: bg.trailingAnchor, constant: -12),
+            stack.centerYAnchor.constraint(equalTo: bg.centerYAnchor),
+        ])
+    }
+
+    private func makeButton(_ symbol: String, _ help: String, _ action: Selector, tint: NSColor) -> NSButton {
+        let b = NSButton()
+        b.bezelStyle = .regularSquare
+        b.isBordered = false
+        b.imagePosition = .imageOnly
+        b.wantsLayer = true
+        b.layer?.cornerRadius = 7
+        let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: help)?.withSymbolConfiguration(cfg)
+        b.contentTintColor = tint
+        b.target = self
+        b.action = action
+        b.translatesAutoresizingMaskIntoConstraints = false
+        b.widthAnchor.constraint(equalToConstant: 34).isActive = true
+        b.heightAnchor.constraint(equalToConstant: 34).isActive = true
+        return b
+    }
+
+    func startGrabbing() {
+        grabbing = true
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.grabOnce()
+        }
+        grabOnce()
+    }
+
+    private func grabOnce() {
+        guard grabbing else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self, let frame = self.grabber.grab() else { return }
+            let added = self.stitcher.addFrame(frame)
+            DispatchQueue.main.async {
+                if added {
+                    self.statusLabel.stringValue = "\(self.stitcher.frameCount) frames · \(self.stitcher.stitchedHeightPx)px"
                 }
-                scroll(by: scrollAmount, at: CGPoint(x: cgRect.midX, y: cgRect.midY))
-                Thread.sleep(forTimeInterval: 0.45)
             }
-
-            let stitched = stitch(frames)
-            DispatchQueue.main.async { completion(stitched) }
         }
     }
 
-    private static func flipToCG(_ rect: CGRect, screen: NSScreen) -> CGRect {
-        let screenHeight = screen.frame.height
-        let flippedY = screenHeight - rect.maxY + screen.frame.minY
-        return CGRect(x: rect.minX, y: flippedY, width: rect.width, height: rect.height)
+    @objc private func doneTapped() {
+        finish(cancelled: false)
     }
 
-    private static func grab(_ cgRect: CGRect) -> CGImage? {
-        CGWindowListCreateImage(cgRect, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
+    @objc private func cancelTapped() {
+        finish(cancelled: true)
     }
 
-    private static func scroll(by amount: Int32, at point: CGPoint) {
-        CGWarpMouseCursorPosition(point)
-        let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
-                            wheel1: amount, wheel2: 0, wheel3: 0)
-        event?.post(tap: .cghidEventTap)
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { finish(cancelled: true) }        // esc
+        else if event.keyCode == 36 { finish(cancelled: false) }  // return
     }
 
-    private static func imagesEqual(_ a: CGImage, _ b: CGImage) -> Bool {
-        guard a.width == b.width, a.height == b.height else { return false }
-        guard let da = pixels(a), let db = pixels(b) else { return false }
-        return da == db
-    }
-
-    private static func pixels(_ image: CGImage) -> Data? {
-        let w = image.width, h = image.height
-        let bytesPerRow = w * 4
-        var data = Data(count: bytesPerRow * h)
-        let space = CGColorSpaceCreateDeviceRGB()
-        let ok = data.withUnsafeMutableBytes { ptr -> Bool in
-            guard let ctx = CGContext(data: ptr.baseAddress, width: w, height: h,
-                                      bitsPerComponent: 8, bytesPerRow: bytesPerRow,
-                                      space: space,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-                return false
-            }
-            ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
-            return true
+    private func finish(cancelled: Bool) {
+        grabbing = false
+        timer?.invalidate()
+        timer = nil
+        if cancelled {
+            onCancel?()
+            return
         }
-        return ok ? data : nil
-    }
-
-    private static func stitch(_ frames: [CGImage]) -> NSImage? {
-        guard let first = frames.first else { return nil }
-        if frames.count == 1 {
-            return NSImage(cgImage: first, size: CGSize(width: first.width, height: first.height))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let image = self?.stitcher.result()
+            DispatchQueue.main.async { self?.onDone?(image) }
         }
-        let width = first.width
-        var segments: [(image: CGImage, top: Int)] = [(first, 0)]
-        for i in 1..<frames.count {
-            let overlap = findOverlap(top: frames[i - 1], bottom: frames[i])
-            segments.append((frames[i], overlap))
-        }
-
-        var totalHeight = first.height
-        for i in 1..<segments.count {
-            totalHeight += frames[i].height - segments[i].top
-        }
-
-        let space = CGColorSpaceCreateDeviceRGB()
-        guard let ctx = CGContext(data: nil, width: width, height: totalHeight,
-                                  bitsPerComponent: 8, bytesPerRow: width * 4,
-                                  space: space,
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-            return nil
-        }
-
-        var yOffset = 0
-        for (idx, seg) in segments.enumerated() {
-            let drawnHeight = idx == 0 ? seg.image.height : seg.image.height - seg.top
-            let srcHeight = drawnHeight
-            let destY = totalHeight - yOffset - srcHeight
-            let cropped = idx == 0
-                ? seg.image
-                : seg.image.cropping(to: CGRect(x: 0, y: 0, width: width, height: srcHeight)) ?? seg.image
-            ctx.draw(cropped, in: CGRect(x: 0, y: destY, width: width, height: srcHeight))
-            yOffset += srcHeight
-        }
-
-        guard let out = ctx.makeImage() else { return nil }
-        return NSImage(cgImage: out, size: CGSize(width: width, height: totalHeight))
-    }
-
-    private static func findOverlap(top: CGImage, bottom: CGImage) -> Int {
-        guard let topData = pixels(top), let bottomData = pixels(bottom) else { return 0 }
-        let w = top.width, h = top.height
-        let bytesPerRow = w * 4
-        let sampleRows = min(60, h / 4)
-        var bestOffset = 0
-        var bestScore = Int.max
-
-        let maxSearch = min(h - sampleRows, h * 3 / 4)
-        var offset = 0
-        while offset < maxSearch {
-            var score = 0
-            let step = max(1, bytesPerRow / 64)
-            for row in 0..<sampleRows {
-                let topRow = (h - sampleRows + row) * bytesPerRow
-                let bottomRow = (offset + row) * bytesPerRow
-                var col = 0
-                while col < bytesPerRow {
-                    let d = Int(topData[topRow + col]) - Int(bottomData[bottomRow + col])
-                    score += d * d
-                    col += step
-                }
-                if score > bestScore { break }
-            }
-            if score < bestScore {
-                bestScore = score
-                bestOffset = offset + sampleRows
-            }
-            offset += 1
-        }
-        return bestOffset
     }
 }

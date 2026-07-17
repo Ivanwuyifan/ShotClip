@@ -23,6 +23,19 @@ else
     codesign --force --deep --sign - "$APP"
 fi
 
+# Package a release zip containing the app + one-click installer.
+if [ -f install.command ]; then
+    DIST="dist/ShotClip"
+    rm -rf dist
+    mkdir -p "$DIST"
+    ditto "$APP" "$DIST/ShotClip.app"
+    cp install.command "$DIST/install.command"
+    chmod +x "$DIST/install.command"
+    rm -f ShotClip.app.zip
+    (cd dist && ditto -c -k --keepParent ShotClip ../ShotClip.app.zip)
+    echo "Packaged ShotClip.app.zip (app + install.command)"
+fi
+
 echo ""
 echo "Built $APP"
 echo "Run it with:  open $APP"

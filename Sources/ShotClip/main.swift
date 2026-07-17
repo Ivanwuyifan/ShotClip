@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         addMenuItem(to: menu, title: "Show bar (⌘⇧Space)", symbol: "rectangle.bottomthird.inset.filled", action: #selector(showOverlay))
         addMenuItem(to: menu, title: "Capture region (⌘⇧4)", symbol: "camera.viewfinder", action: #selector(capture))
+        addMenuItem(to: menu, title: "Scrolling Capture…", symbol: "arrow.up.and.down.square", action: #selector(scrollingCapture))
         menu.addItem(.separator())
         let editItem = addMenuItem(to: menu, title: "Edit mode (annotate after capture)", symbol: "pencil.and.outline", action: #selector(toggleEditMode))
         editItem.state = Self.editModeEnabled ? .on : .off
@@ -134,6 +135,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showOverlay() { overlay.toggle() }
     @objc private func capture() { Capture.interactiveRegion() }
+
+    @objc private func scrollingCapture() {
+        ScrollCapture.begin { [weak self] image in
+            guard let self = self, let image = image, let data = image.pngData() else { return }
+            let url = Store.shared.baseDir
+                .appendingPathComponent("shot-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(6)).png")
+            try? data.write(to: url)
+            if Self.editModeEnabled {
+                self.openAnnotator(url)
+            } else {
+                self.finalize(url)
+            }
+        }
+    }
     @objc private func checkUpdates() { Updater.checkInBackground(manual: true) }
     @objc private func showOnboarding() { Onboarding.present() }
     @objc private func uninstall() { Uninstaller.confirmAndUninstall() }

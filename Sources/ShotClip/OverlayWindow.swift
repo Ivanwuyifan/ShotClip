@@ -4,6 +4,7 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
     private var hideTimer: Timer?
     private let row = NSStackView()
     private let scroll = NSScrollView()
+    private var outsideClickMonitor: Any?
 
     init() {
         let w: CGFloat = 940
@@ -43,7 +44,7 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(titleLabel)
 
-        let hint = NSTextField(labelWithString: "drag out · click to copy")
+        let hint = NSTextField(labelWithString: "drag out · click to copy · click away to close")
         hint.font = .systemFont(ofSize: 10.5, weight: .medium)
         hint.textColor = NSColor(white: 1, alpha: 0.30)
         hint.translatesAutoresizingMaskIntoConstraints = false
@@ -138,6 +139,30 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
             animator().alphaValue = 1
         }
         scheduleHide()
+        installOutsideClickMonitor()
+    }
+
+    private func installOutsideClickMonitor() {
+        removeOutsideClickMonitor()
+        // Clicks in other apps come through the global monitor. If the click is
+        // outside the bar's frame, dismiss it. (Clicks inside the bar are handled
+        // by the cards directly and never reach a global monitor.)
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            let mouse = NSEvent.mouseLocation
+            if !self.frame.contains(mouse) {
+                DispatchQueue.main.async { self.hide() }
+            }
+        }
+    }
+
+    private func removeOutsideClickMonitor() {
+        if let m = outsideClickMonitor {
+            NSEvent.removeMonitor(m)
+            outsideClickMonitor = nil
+        }
     }
 
     func toggle() {
@@ -166,6 +191,7 @@ final class OverlayWindow: NSPanel, DragCompletionDelegate {
 
     func hide() {
         hideTimer?.invalidate()
+        removeOutsideClickMonitor()
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
             animator().alphaValue = 0
