@@ -25,17 +25,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         let menu = NSMenu()
-        menu.addItem(withTitle: "Show bar (⌘⇧Space)", action: #selector(showOverlay), keyEquivalent: "")
-        menu.addItem(withTitle: "Capture region (⌘⇧4)", action: #selector(capture), keyEquivalent: "")
+        addMenuItem(to: menu, title: "Show bar (⌘⇧Space)", symbol: "rectangle.bottomthird.inset.filled", action: #selector(showOverlay))
+        addMenuItem(to: menu, title: "Capture region (⌘⇧4)", symbol: "camera.viewfinder", action: #selector(capture))
         menu.addItem(.separator())
-        let loginItem = NSMenuItem(title: "Open at Startup", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        let loginItem = addMenuItem(to: menu, title: "Open at Startup", symbol: "power", action: #selector(toggleLaunchAtLogin))
         loginItem.state = LaunchAtLogin.isEnabled ? .on : .off
         launchItem = loginItem
-        menu.addItem(loginItem)
-        menu.addItem(withTitle: "Check for Updates…", action: #selector(checkUpdates), keyEquivalent: "")
+        addMenuItem(to: menu, title: "Check for Updates…", symbol: "arrow.triangle.2.circlepath", action: #selector(checkUpdates))
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Uninstall ShotClip…", action: #selector(uninstall), keyEquivalent: "")
-        menu.addItem(withTitle: "Quit ShotClip", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
+        addMenuItem(to: menu, title: "Uninstall ShotClip…", symbol: "trash", action: #selector(uninstall))
+        addMenuItem(to: menu, title: "Quit ShotClip", symbol: "xmark.circle", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
 
         Store.shared.onChange = { [weak self] in
@@ -74,6 +73,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         startHoverTracking()
+    }
+
+    @discardableResult
+    private func addMenuItem(to menu: NSMenu, title: String, symbol: String,
+                            action: Selector, keyEquivalent: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) {
+            img.isTemplate = true
+            item.image = img
+        }
+        menu.addItem(item)
+        return item
     }
 
     @objc private func showOverlay() { overlay.toggle() }
