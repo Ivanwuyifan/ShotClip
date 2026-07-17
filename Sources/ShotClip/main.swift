@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(loginItem)
         menu.addItem(withTitle: "Check for Updates…", action: #selector(checkUpdates), keyEquivalent: "")
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Uninstall ShotClip…", action: #selector(uninstall), keyEquivalent: "")
         menu.addItem(withTitle: "Quit ShotClip", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
 
@@ -78,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showOverlay() { overlay.toggle() }
     @objc private func capture() { Capture.interactiveRegion() }
     @objc private func checkUpdates() { Updater.checkInBackground(manual: true) }
+    @objc private func uninstall() { Uninstaller.confirmAndUninstall() }
 
     @objc private func toggleLaunchAtLogin() {
         LaunchAtLogin.toggle()
