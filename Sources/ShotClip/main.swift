@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let iconURL = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
                let icon = NSImage(contentsOf: iconURL) {
                 icon.size = NSSize(width: 18, height: 18)
-                icon.isTemplate = false
+                icon.isTemplate = true
                 button.image = icon
             } else {
                 button.title = "✂️"
