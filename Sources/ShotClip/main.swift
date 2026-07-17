@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Show bar (⌘⇧Space)", action: #selector(showOverlay), keyEquivalent: "")
         menu.addItem(withTitle: "Capture region (⌘⇧4)", action: #selector(capture), keyEquivalent: "")
         menu.addItem(.separator())
-        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        let loginItem = NSMenuItem(title: "Open at Startup", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         loginItem.state = LaunchAtLogin.isEnabled ? .on : .off
         launchItem = loginItem
         menu.addItem(loginItem)
