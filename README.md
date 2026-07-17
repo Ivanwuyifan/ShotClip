@@ -67,6 +67,16 @@ ShotClip uses ⌘⇧4 for capture, which collides with the native screenshot sho
 To keep native ⌘⇧4 and use a different key for ShotClip, change the keyCode in
 `register(id: 2, ...)` in `Sources/ShotClip/main.swift`.
 
+## Uninstall
+
+Run the bundled script — it quits ShotClip, removes the login item, deletes the app, and clears its data:
+
+```bash
+./uninstall.sh
+```
+
+If a leftover **ShotClip** entry remains in *System Settings → General → Login Items*, remove it there.
+
 ## Storage
 
 - Directory: `$TMPDIR/ShotClip/`
@@ -162,6 +172,16 @@ ShotClip 用 ⌘⇧4 作为截图键,会和系统原生截图冲突。到
 
 想保留系统原生 ⌘⇧4、给 ShotClip 换别的键的话,改
 `Sources/ShotClip/main.swift` 里 `register(id: 2, ...)` 的 keyCode 即可。
+
+## 卸载
+
+跑自带的卸载脚本 —— 会退出 ShotClip、取消开机启动项、删除 App、清理数据:
+
+```bash
+./uninstall.sh
+```
+
+如果 *系统设置 → 通用 → 登录项* 里还残留 **ShotClip** 条目,在那里手动删掉即可。
 
 ## 存储位置
 
