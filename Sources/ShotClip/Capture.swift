@@ -13,7 +13,6 @@ enum Capture {
         proc.terminationHandler = { _ in
             DispatchQueue.main.async {
                 if FileManager.default.fileExists(atPath: url.path) {
-                    Store.shared.addShot(url)
                     onCaptured?(url)
                 }
             }

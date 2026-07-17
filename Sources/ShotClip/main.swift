@@ -6,7 +6,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let overlay = OverlayWindow()
     private var trackingTimer: Timer?
     private var sendPanel: SendPanel?
+    private var annotator: AnnotatorWindow?
     private weak var launchItem: NSMenuItem?
+    private weak var editModeItem: NSMenuItem?
+
+    static var editModeEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "ShotClip.editMode") }
+        set { UserDefaults.standard.set(newValue, forKey: "ShotClip.editMode") }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -28,9 +35,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addMenuItem(to: menu, title: "Show bar (⌘⇧Space)", symbol: "rectangle.bottomthird.inset.filled", action: #selector(showOverlay))
         addMenuItem(to: menu, title: "Capture region (⌘⇧4)", symbol: "camera.viewfinder", action: #selector(capture))
         menu.addItem(.separator())
+        let editItem = addMenuItem(to: menu, title: "Edit mode (annotate after capture)", symbol: "pencil.and.outline", action: #selector(toggleEditMode))
+        editItem.state = Self.editModeEnabled ? .on : .off
+        editModeItem = editItem
+        menu.addItem(.separator())
         let loginItem = addMenuItem(to: menu, title: "Open at Startup", symbol: "power", action: #selector(toggleLaunchAtLogin))
         loginItem.state = LaunchAtLogin.isEnabled ? .on : .off
         launchItem = loginItem
+        addMenuItem(to: menu, title: "Permissions & Setup…", symbol: "checkmark.shield", action: #selector(showOnboarding))
         addMenuItem(to: menu, title: "Check for Updates…", symbol: "arrow.triangle.2.circlepath", action: #selector(checkUpdates))
         menu.addItem(.separator())
         addMenuItem(to: menu, title: "Uninstall ShotClip…", symbol: "trash", action: #selector(uninstall))
@@ -49,13 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Updater.checkInBackground()
         }
 
-        Capture.onCaptured = { [weak self] url in
-            ClipboardMonitor.shared.suppressNext()
-            Sender.copyImage(url)
+        Onboarding.showIfFirstRun()
 
-            let panel = SendPanel(imageURL: url)
-            self?.sendPanel = panel
-            panel.present()
+        Capture.onCaptured = { [weak self] url in
+            if Self.editModeEnabled {
+                self?.openAnnotator(url)
+            } else {
+                self?.finalize(url)
+            }
         }
 
         HotkeyManager.shared.start()
@@ -89,10 +102,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
+    private func openAnnotator(_ url: URL) {
+        guard let window = AnnotatorWindow(imageURL: url) else {
+            finalize(url)
+            return
+        }
+        window.onDone = { [weak self] finalURL in
+            self?.annotator = nil
+            self?.finalize(finalURL)
+        }
+        window.onScrollCapture = { done in
+            ScrollCapture.begin(completion: done)
+        }
+        window.onClosed = { [weak self] in
+            self?.annotator = nil
+        }
+        annotator = window
+        NSApp.activate(ignoringOtherApps: true)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func finalize(_ url: URL) {
+        Store.shared.addShot(url)
+        ClipboardMonitor.shared.suppressNext()
+        Sender.copyImage(url)
+        let panel = SendPanel(imageURL: url)
+        sendPanel = panel
+        panel.present()
+    }
+
     @objc private func showOverlay() { overlay.toggle() }
     @objc private func capture() { Capture.interactiveRegion() }
     @objc private func checkUpdates() { Updater.checkInBackground(manual: true) }
+    @objc private func showOnboarding() { Onboarding.present() }
     @objc private func uninstall() { Uninstaller.confirmAndUninstall() }
+
+    @objc private func toggleEditMode() {
+        Self.editModeEnabled.toggle()
+        editModeItem?.state = Self.editModeEnabled ? .on : .off
+    }
 
     @objc private func toggleLaunchAtLogin() {
         LaunchAtLogin.toggle()
