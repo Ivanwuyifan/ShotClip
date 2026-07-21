@@ -69,7 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Updater.checkInBackground()
         }
 
-        Onboarding.showIfFirstRun()
+        Installer.offerMoveIfNeeded()
+        Onboarding.showIfNeeded()
 
         Capture.onCaptured = { [weak self] url in
             if Self.editModeEnabled {

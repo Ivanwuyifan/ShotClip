@@ -5,10 +5,28 @@ enum Onboarding {
     private static let shownKey = "ShotClip.onboardingShown"
     private static var window: OnboardingWindow?
 
-    static func showIfFirstRun() {
-        guard !UserDefaults.standard.bool(forKey: shownKey) else { return }
+    /// Shows on first run, and again on any launch where a required permission
+    /// is missing (e.g. after replacing an old version whose grants no longer
+    /// match this build's signature).
+    static func showIfNeeded() {
+        let firstRun = !UserDefaults.standard.bool(forKey: shownKey)
         UserDefaults.standard.set(true, forKey: shownKey)
+        guard firstRun || !hasScreenRecording() || !hasAccessibility() else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { present() }
+    }
+
+    /// Fires every system permission prompt in sequence — one click from the
+    /// user per prompt, no digging through System Settings.
+    static func grantAll() {
+        if !hasAccessibility() {
+            let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(opts)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if !hasScreenRecording() {
+                _ = CGRequestScreenCaptureAccess()
+            }
+        }
     }
 
     static func present() {
@@ -147,11 +165,18 @@ final class OnboardingWindow: NSWindow, NSWindowDelegate {
         note.preferredMaxLayoutWidth = 432
         stack.addArrangedSubview(note)
 
+        let buttons = NSStackView()
+        buttons.orientation = .horizontal
+        buttons.spacing = 10
+        let grantAll = NSButton(title: "Grant All…", target: self, action: #selector(grantAllTapped))
+        grantAll.bezelStyle = .rounded
+        grantAll.keyEquivalent = "\r"
         let done = NSButton(title: "Done", target: self, action: #selector(closeWindow))
         done.bezelStyle = .rounded
-        done.keyEquivalent = "\r"
-        done.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(done)
+        buttons.addArrangedSubview(grantAll)
+        buttons.addArrangedSubview(done)
+        buttons.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(buttons)
 
         refreshRows()
     }
@@ -167,6 +192,7 @@ final class OnboardingWindow: NSWindow, NSWindowDelegate {
     }
 
     @objc private func closeWindow() { close() }
+    @objc private func grantAllTapped() { Onboarding.grantAll() }
 
     func windowWillClose(_ notification: Notification) {
         refreshTimer?.invalidate()

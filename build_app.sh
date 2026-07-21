@@ -16,6 +16,28 @@ cp ".build/release/ShotClip" "$APP/Contents/MacOS/ShotClip"
 [ -f MenuBarIcon.png ] && cp MenuBarIcon.png "$APP/Contents/Resources/MenuBarIcon.png"
 
 CERT="ShotClip Self-Signed"
+
+# Create the stable self-signed codesigning cert on first build, so TCC
+# permissions (Screen Recording / Accessibility) survive rebuilds instead of
+# silently falling back to ad-hoc signing (which changes every build).
+if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$CERT"; then
+    echo "Creating stable self-signed cert '$CERT' (one-time)..."
+    TMPCERT=$(mktemp -d)
+    openssl req -x509 -newkey rsa:2048 -keyout "$TMPCERT/key.pem" -out "$TMPCERT/cert.pem" \
+        -days 3650 -nodes -subj "/CN=$CERT" \
+        -addext "extendedKeyUsage=codeSigning" -addext "keyUsage=digitalSignature" \
+        -addext "basicConstraints=critical,CA:false" 2>/dev/null
+    openssl pkcs12 -export -legacy -out "$TMPCERT/cert.p12" \
+        -inkey "$TMPCERT/key.pem" -in "$TMPCERT/cert.pem" -passout pass:shotclip 2>/dev/null \
+        || openssl pkcs12 -export -out "$TMPCERT/cert.p12" \
+        -inkey "$TMPCERT/key.pem" -in "$TMPCERT/cert.pem" -passout pass:shotclip
+    security import "$TMPCERT/cert.p12" -k ~/Library/Keychains/login.keychain-db \
+        -P shotclip -T /usr/bin/codesign
+    security add-trusted-cert -p codeSign -k ~/Library/Keychains/login.keychain-db \
+        "$TMPCERT/cert.pem" 2>/dev/null || true
+    rm -rf "$TMPCERT"
+fi
+
 if codesign --force --deep --sign "$CERT" "$APP" 2>/dev/null; then
     echo "Signed with stable self-signed cert ($CERT) — screen-recording permission persists across rebuilds."
 else

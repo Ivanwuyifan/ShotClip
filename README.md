@@ -48,6 +48,7 @@ A menu-bar macOS app that gives you a hotkey-summoned card wall at the bottom of
 - **Clipboard History panel (⌘⇧V)** — a searchable vertical list of everything you've copied (up to 200 entries): text, links, images, screenshots. Type to filter, click to copy.
 - **Temporary + auto-expiry** — everything lives in a temp dir and is purged after 30 days (max 40 screenshots, 200 clipboard entries).
 - **Self-update** — checks GitHub Releases on launch (and via the menu); downloads, replaces itself, and relaunches.
+- **One-click install & permissions** — running from outside /Applications offers a one-click "Install & Relaunch" that overwrites any older copy (one canonical path = TCC grants survive updates). The permissions window now reappears automatically whenever a required permission is missing, with a **Grant All…** button that fires every system prompt in sequence. `build_app.sh` auto-creates the stable self-signed cert on first build, so rebuilds never fall back to ad-hoc signing.
 
 ## Install / Build
 
@@ -180,6 +181,7 @@ If a leftover **ShotClip** entry remains in *System Settings → General → Log
 - **剪贴板历史面板(⌘⇧V)** — 竖排可搜索的完整历史(最多 200 条):文字、链接、图片、截图。打字过滤,点击复制。
 - **临时存放 + 自动过期** — 所有内容存在临时目录,30 天后自动清除(截图最多 40 条,剪贴板历史最多 200 条)。
 - **自动更新** — 启动时(及菜单里)检查 GitHub Releases,自动下载、替换、重启。
+- **一键安装 + 一键授权** — 从 /Applications 以外的位置运行时,弹窗一键「安装并重启」,自动覆盖旧版本(固定路径 + 固定证书 = 权限升级后不丢)。权限窗口在检测到缺权限时自动弹出,新增 **Grant All…** 按钮依次触发所有系统授权提示。`build_app.sh` 首次构建自动创建稳定自签证书,不再静默降级 adhoc 签名。
 
 ## 安装 / 构建
 
