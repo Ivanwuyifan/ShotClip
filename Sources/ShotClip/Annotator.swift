@@ -484,10 +484,15 @@ final class AnnotatorWindow: NSWindow, NSWindowDelegate {
 
         stack.addArrangedSubview(separator())
 
-        let ocr = toolButton(symbol: "text.viewfinder", help: "OCR — recognise text")
+        let ocr = toolButton(symbol: "text.viewfinder", help: "Extract text (OCR) — copy to clipboard")
         ocr.target = self
         ocr.action = #selector(runOCR)
         stack.addArrangedSubview(ocr)
+
+        let translate = toolButton(symbol: "character.bubble", help: "Translate — OCR then translate this image")
+        translate.target = self
+        translate.action = #selector(runTranslate)
+        stack.addArrangedSubview(translate)
 
         let scroll = toolButton(symbol: "arrow.up.and.down.square", help: "Scrolling Capture — select a region and scroll")
         scroll.target = self
@@ -607,24 +612,12 @@ final class AnnotatorWindow: NSWindow, NSWindowDelegate {
 
     @objc private func runOCR() {
         canvas.commitActiveText()
-        OCR.recognise(in: canvas.baseImage) { [weak self] text in
-            DispatchQueue.main.async { self?.presentOCRResult(text) }
-        }
+        TextActions.extractText(from: canvas.render())
     }
 
-    private func presentOCRResult(_ text: String?) {
-        let alert = NSAlert()
-        if let text = text, !text.isEmpty {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            alert.messageText = "Text copied to clipboard"
-            alert.informativeText = text.count > 400 ? String(text.prefix(400)) + "…" : text
-        } else {
-            alert.messageText = "No text found"
-            alert.informativeText = "Vision couldn't detect any text in this screenshot."
-        }
-        alert.addButton(withTitle: "OK")
-        alert.beginSheetModal(for: self, completionHandler: nil)
+    @objc private func runTranslate() {
+        canvas.commitActiveText()
+        TextActions.translate(image: canvas.render())
     }
 
     @objc private func startScrollCapture() {

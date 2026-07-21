@@ -26,6 +26,37 @@ enum TextActions {
         }
     }
 
+    // MARK: - Operate on an already-captured image (annotation editor)
+
+    /// OCR an image already in hand (e.g. the editor's current shot).
+    static func extractText(from image: NSImage) {
+        let popup = ResultPopup.showSpinner(title: "Extract Text")
+        OCR.recognise(in: image) { text in
+            DispatchQueue.main.async {
+                guard let text = text, !text.isEmpty else {
+                    popup.fail("No text recognised in this image.")
+                    return
+                }
+                copyToClipboardAndHistory(text)
+                popup.replace(sections: [.init(title: "Extracted text (copied to clipboard)", text: text)])
+            }
+        }
+    }
+
+    /// OCR + translate an image already in hand.
+    static func translate(image: NSImage) {
+        let popup = ResultPopup.showSpinner(title: "Translate Screenshot")
+        OCR.recognise(in: image) { text in
+            DispatchQueue.main.async {
+                guard let text = text, !text.isEmpty else {
+                    popup.fail("No text recognised in this image.")
+                    return
+                }
+                translate(text, into: popup)
+            }
+        }
+    }
+
     // MARK: - Translate captured region (⌘⇧T)
 
     /// Select a region → OCR → LLM translation. Translation is auto-copied.
