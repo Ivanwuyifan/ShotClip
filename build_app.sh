@@ -20,7 +20,10 @@ CERT="ShotClip Self-Signed"
 # Create the stable self-signed codesigning cert on first build, so TCC
 # permissions (Screen Recording / Accessibility) survive rebuilds instead of
 # silently falling back to ad-hoc signing (which changes every build).
-if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$CERT"; then
+# Check by certificate presence (not find-identity), so an existing cert is
+# always reused — never create a second one with the same name (that name
+# clash makes codesign ambiguous and fall back to ad-hoc).
+if ! security find-certificate -c "$CERT" >/dev/null 2>&1; then
     echo "Creating stable self-signed cert '$CERT' (one-time)..."
     TMPCERT=$(mktemp -d)
     openssl req -x509 -newkey rsa:2048 -keyout "$TMPCERT/key.pem" -out "$TMPCERT/cert.pem" \
