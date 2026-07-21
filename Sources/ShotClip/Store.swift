@@ -100,7 +100,8 @@ final class Store {
 
     let baseDir: URL
     private let ttl: TimeInterval = 30 * 24 * 60 * 60
-    private let maxItems = 40
+    private let maxItems = 40        // screenshots (each is a PNG on disk)
+    private let maxClips = 200       // clipboard history entries
 
     var onChange: (() -> Void)?
 
@@ -215,11 +216,11 @@ final class Store {
             for old in shots[maxItems...] { try? FileManager.default.removeItem(at: old.url) }
             shots = Array(shots.prefix(maxItems))
         }
-        if clips.count > maxItems {
-            for old in clips[maxItems...] {
+        if clips.count > maxClips {
+            for old in clips[maxClips...] {
                 if case .image(let u) = old.kind { try? FileManager.default.removeItem(at: u) }
             }
-            clips = Array(clips.prefix(maxItems))
+            clips = Array(clips.prefix(maxClips))
         }
         saveClips()
         onChange?()
