@@ -4,6 +4,7 @@ import Carbon.HIToolbox
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let overlay = OverlayWindow()
+    private let historyPanel = HistoryPanel()
     private var trackingTimer: Timer?
     private var sendPanel: SendPanel?
     private var annotator: AnnotatorWindow?
@@ -36,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addMenuItem(to: menu, title: "Capture region (⌘⇧4)", symbol: "camera.viewfinder", action: #selector(capture))
         addMenuItem(to: menu, title: "Scrolling Capture…", symbol: "arrow.up.and.down.square", action: #selector(scrollingCapture))
         menu.addItem(.separator())
+        addMenuItem(to: menu, title: "Extract Text from Screen (⌘⇧E)", symbol: "text.viewfinder", action: #selector(extractText))
+        addMenuItem(to: menu, title: "Translate Screenshot (⌘⇧T)", symbol: "character.bubble", action: #selector(translateShot))
+        addMenuItem(to: menu, title: "Translate Selection (⌘⇧L)", symbol: "globe", action: #selector(translateSelection))
+        addMenuItem(to: menu, title: "Clipboard History (⌘⇧V)", symbol: "list.clipboard", action: #selector(showHistory))
+        addMenuItem(to: menu, title: "AI Settings…", symbol: "brain", action: #selector(showAISettings))
+        menu.addItem(.separator())
         let editItem = addMenuItem(to: menu, title: "Edit mode (annotate after capture)", symbol: "pencil.and.outline", action: #selector(toggleEditMode))
         editItem.state = Self.editModeEnabled ? .on : .off
         editModeItem = editItem
@@ -62,7 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Updater.checkInBackground()
         }
 
-        Onboarding.showIfFirstRun()
+        Installer.offerMoveIfNeeded()
+        Onboarding.showIfNeeded()
 
         Capture.onCaptured = { [weak self] url in
             if Self.editModeEnabled {
@@ -84,6 +92,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modifiers: UInt32(cmdKey | shiftKey)) {
             shotLog("ShotClip: hotkey FIRED id=2 (capture)")
             DispatchQueue.main.async { Capture.interactiveRegion() }
+        }
+        // ⌘⇧E -> extract text from a screen region. keycode 14 = 'e'
+        HotkeyManager.shared.register(id: 3, keyCode: 14,
+            modifiers: UInt32(cmdKey | shiftKey)) {
+            shotLog("ShotClip: hotkey FIRED id=3 (extract text)")
+            DispatchQueue.main.async { TextActions.extractTextFromRegion() }
+        }
+        // ⌘⇧T -> capture a region and translate its text. keycode 17 = 't'
+        HotkeyManager.shared.register(id: 4, keyCode: 17,
+            modifiers: UInt32(cmdKey | shiftKey)) {
+            shotLog("ShotClip: hotkey FIRED id=4 (translate shot)")
+            DispatchQueue.main.async { TextActions.translateRegion() }
+        }
+        // ⌘⇧L -> translate the current selection. keycode 37 = 'l'
+        HotkeyManager.shared.register(id: 5, keyCode: 37,
+            modifiers: UInt32(cmdKey | shiftKey)) {
+            shotLog("ShotClip: hotkey FIRED id=5 (translate selection)")
+            DispatchQueue.main.async { TextActions.translateSelection() }
+        }
+        // ⌘⇧V -> clipboard history panel. keycode 9 = 'v'
+        HotkeyManager.shared.register(id: 6, keyCode: 9,
+            modifiers: UInt32(cmdKey | shiftKey)) { [weak self] in
+            shotLog("ShotClip: hotkey FIRED id=6 (history)")
+            DispatchQueue.main.async { self?.historyPanel.toggle() }
         }
 
         startHoverTracking()
@@ -135,6 +167,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showOverlay() { overlay.toggle() }
     @objc private func capture() { Capture.interactiveRegion() }
+    @objc private func extractText() { TextActions.extractTextFromRegion() }
+    @objc private func translateShot() { TextActions.translateRegion() }
+    @objc private func translateSelection() { TextActions.translateSelection() }
+    @objc private func showHistory() { historyPanel.toggle() }
+    @objc private func showAISettings() { AISettingsWindow.present() }
 
     @objc private func scrollingCapture() {
         ScrollCapture.begin { [weak self] image in

@@ -5,10 +5,53 @@ enum Onboarding {
     private static let shownKey = "ShotClip.onboardingShown"
     private static var window: OnboardingWindow?
 
-    static func showIfFirstRun() {
-        guard !UserDefaults.standard.bool(forKey: shownKey) else { return }
+    /// Shows on first run, and again on any launch where a required permission
+    /// is missing (e.g. after replacing an old version whose grants no longer
+    /// match this build's signature).
+    static func showIfNeeded() {
+        let firstRun = !UserDefaults.standard.bool(forKey: shownKey)
         UserDefaults.standard.set(true, forKey: shownKey)
+        guard firstRun || !hasScreenRecording() || !hasAccessibility() else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { present() }
+    }
+
+    /// Fixes the "System Settings shows the toggle ON but the app still isn't
+    /// trusted" state: that happens when the TCC row was recorded against an
+    /// older build's signature. Deleting the stale row and re-requesting makes
+    /// macOS record the *current* binary.
+    static func repairAccessibility() {
+        let reset = Process()
+        reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        reset.arguments = ["reset", "Accessibility",
+                           Bundle.main.bundleIdentifier ?? "com.local.shotclip"]
+        try? reset.run()
+        reset.waitUntilExit()
+        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(opts)
+    }
+
+    /// Restarts the app so freshly granted permissions apply.
+    static func relaunch() {
+        let path = Bundle.main.bundlePath
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
+        proc.arguments = ["-c", "sleep 0.5; /usr/bin/open \"\(path)\""]
+        try? proc.run()
+        NSApp.terminate(nil)
+    }
+
+    /// Fires every system permission prompt in sequence — one click from the
+    /// user per prompt, no digging through System Settings.
+    static func grantAll() {
+        if !hasAccessibility() {
+            let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(opts)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if !hasScreenRecording() {
+                _ = CGRequestScreenCaptureAccess()
+            }
+        }
     }
 
     static func present() {
@@ -118,9 +161,10 @@ final class OnboardingWindow: NSWindow, NSWindowDelegate {
             action: { Onboarding.requestScreenRecording() })
         let ax = PermissionRow(
             title: "Accessibility",
-            detail: "Lets ShotClip auto-paste into other apps.",
+            detail: "Lets ShotClip auto-paste into other apps. If the toggle in System Settings is ON but this row still shows ⚠︎ (stale grant from an older version), use Repair.",
             check: { Onboarding.hasAccessibility() },
-            action: { Onboarding.requestAccessibility() })
+            action: { Onboarding.requestAccessibility() },
+            repair: { Onboarding.repairAccessibility() })
         let keys = PermissionRow(
             title: "Free up ⌘⇧4",
             detail: "Open Keyboard settings → click \"Keyboard Shortcuts…\" → Screenshots, then uncheck the ⌘⇧4 items.",
@@ -147,11 +191,21 @@ final class OnboardingWindow: NSWindow, NSWindowDelegate {
         note.preferredMaxLayoutWidth = 432
         stack.addArrangedSubview(note)
 
+        let buttons = NSStackView()
+        buttons.orientation = .horizontal
+        buttons.spacing = 10
+        let grantAll = NSButton(title: "Grant All…", target: self, action: #selector(grantAllTapped))
+        grantAll.bezelStyle = .rounded
+        grantAll.keyEquivalent = "\r"
+        let relaunch = NSButton(title: "Relaunch ShotClip", target: self, action: #selector(relaunchTapped))
+        relaunch.bezelStyle = .rounded
         let done = NSButton(title: "Done", target: self, action: #selector(closeWindow))
         done.bezelStyle = .rounded
-        done.keyEquivalent = "\r"
-        done.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(done)
+        buttons.addArrangedSubview(grantAll)
+        buttons.addArrangedSubview(relaunch)
+        buttons.addArrangedSubview(done)
+        buttons.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(buttons)
 
         refreshRows()
     }
@@ -167,6 +221,8 @@ final class OnboardingWindow: NSWindow, NSWindowDelegate {
     }
 
     @objc private func closeWindow() { close() }
+    @objc private func grantAllTapped() { Onboarding.grantAll() }
+    @objc private func relaunchTapped() { Onboarding.relaunch() }
 
     func windowWillClose(_ notification: Notification) {
         refreshTimer?.invalidate()
@@ -180,12 +236,16 @@ final class PermissionRow {
     private let check: () -> Bool
     private let action: () -> Void
     private let optional: Bool
+    private var repair: (() -> Void)?
+    private var repairButton: NSButton?
 
     init(title: String, detail: String, check: @escaping () -> Bool,
-         action: @escaping () -> Void, optional: Bool = false) {
+         action: @escaping () -> Void, optional: Bool = false,
+         repair: (() -> Void)? = nil) {
         self.check = check
         self.action = action
         self.optional = optional
+        self.repair = repair
 
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.08).cgColor
@@ -215,6 +275,19 @@ final class PermissionRow {
         view.addSubview(detailLabel)
         view.addSubview(button)
 
+        if repair != nil {
+            let rb = NSButton(title: "Repair…", target: self, action: #selector(repairTapped))
+            rb.bezelStyle = .rounded
+            rb.font = .systemFont(ofSize: 11)
+            rb.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(rb)
+            NSLayoutConstraint.activate([
+                rb.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
+                rb.topAnchor.constraint(equalTo: view.centerYAnchor, constant: 4),
+            ])
+            repairButton = rb
+        }
+
         NSLayoutConstraint.activate([
             status.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
             status.centerYAnchor.constraint(equalTo: view.centerYAnchor),
@@ -229,13 +302,17 @@ final class PermissionRow {
             detailLabel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
 
             button.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
-            button.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            repair == nil
+                ? button.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+                : button.bottomAnchor.constraint(equalTo: view.centerYAnchor, constant: -2),
         ])
     }
 
     @objc private func tapped() { action() }
+    @objc private func repairTapped() { repair?() }
 
     func refresh() {
+        repairButton?.isHidden = check()
         if optional {
             statusLabel.stringValue = "•"
             statusLabel.textColor = .tertiaryLabelColor

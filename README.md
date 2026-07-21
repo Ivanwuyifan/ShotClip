@@ -38,8 +38,17 @@ A menu-bar macOS app that gives you a hotkey-summoned card wall at the bottom of
 - **Auto-copy on capture** — after ⌘⇧4 the screenshot is already on the clipboard, ⌘V anywhere.
 - **Send-to-app panel** — after capture, pick a running app and the screenshot is auto-pasted (terminals get the path, other apps get the image). Recently-used apps sort first; irrelevant apps (Calendar, Finder, …) are filtered out.
 - **Auto-hide** — disappears 5s after showing (hovering resets the timer), or right after a drag.
-- **Temporary + auto-expiry** — everything lives in a temp dir and is purged after 30 days (max 40 items per type).
+- **Extract Text from Screen (⌘⇧E)** — select any on-screen region and ShotClip OCRs it (offline, macOS Vision, Chinese + English) and puts the text on the clipboard + into the history. Perfect for text that apps won't let you copy (images, PDFs, video subtitles, protected UIs).
+- **Translate Screenshot (⌘⇧T)** — select a region; its text is OCR'd and translated by your configured AI backend, shown in a popup and auto-copied.
+- **Translate Selection (⌘⇧L)** — select text in any app, hit the hotkey, get the translation in a popup (auto-copied). Target language configurable; default auto-swaps 中 ↔ EN.
+- **AI Settings…** — pick the translation backend:
+  - **Claude Code (subscription)** — uses the `claude` CLI you're already logged into; no API key needed.
+  - **Codex (ChatGPT subscription)** — uses the `codex` CLI login; no API key needed.
+  - **Anthropic API key** or any **OpenAI-compatible endpoint** (base URL + key + model). Keys are stored in the macOS Keychain, never in plain text.
+- **Clipboard History panel (⌘⇧V)** — a searchable vertical list of everything you've copied (up to 200 entries): text, links, images, screenshots. Type to filter, click to copy.
+- **Temporary + auto-expiry** — everything lives in a temp dir and is purged after 30 days (max 40 screenshots, 200 clipboard entries).
 - **Self-update** — checks GitHub Releases on launch (and via the menu); downloads, replaces itself, and relaunches.
+- **One-click install & permissions** — running from outside /Applications offers a one-click "Install & Relaunch" that overwrites any older copy (one canonical path = TCC grants survive updates). The permissions window now reappears automatically whenever a required permission is missing, with a **Grant All…** button that fires every system prompt in sequence. `build_app.sh` auto-creates the stable self-signed cert on first build, so rebuilds never fall back to ad-hoc signing.
 
 ## Install / Build
 
@@ -162,8 +171,17 @@ If a leftover **ShotClip** entry remains in *System Settings → General → Log
 - **截图自动进剪贴板** — 按完 ⌘⇧4,截图已在剪贴板,可直接 ⌘V。
 - **发送到 App 面板** — 截图后选一个正在运行的 App,截图自动粘贴过去(终端给路径,其它 App 给图片)。最近用过的 App 排在前面;无关 App(日历、访达等)自动过滤。
 - **自动隐藏** — 呼出 5 秒后自动消失(鼠标悬停会重置计时),或拖拽完成后立即隐藏。
-- **临时存放 + 自动过期** — 所有内容存在临时目录,30 天后自动清除(每类最多 40 条)。
+- **屏幕取字(⌘⇧E)** — 框选屏幕上任意区域,ShotClip 离线 OCR(macOS Vision,中英文)后把文字放进剪贴板和历史。专治**复制不了的文字**:图片、PDF、视频字幕、禁止复制的界面,框一下直接拿到文本。
+- **截屏翻译(⌘⇧T)** — 框选一个区域,先 OCR 再交给你配置的 AI 翻译,弹窗显示译文并自动复制。
+- **划词翻译(⌘⇧L)** — 在任意 App 里选中文字按快捷键,译文弹窗显示并自动复制。目标语言可配置,默认中英互换。
+- **AI Settings…** — 选择翻译后端:
+  - **Claude Code(订阅)** — 直接用你已登录的 `claude` CLI,无需 API key。
+  - **Codex(ChatGPT 订阅)** — 用 `codex` CLI 的登录态,无需 API key。
+  - **Anthropic API key** 或任意 **OpenAI 兼容接口**(base URL + key + 模型)。密钥存在 macOS 钥匙串里,不落明文。
+- **剪贴板历史面板(⌘⇧V)** — 竖排可搜索的完整历史(最多 200 条):文字、链接、图片、截图。打字过滤,点击复制。
+- **临时存放 + 自动过期** — 所有内容存在临时目录,30 天后自动清除(截图最多 40 条,剪贴板历史最多 200 条)。
 - **自动更新** — 启动时(及菜单里)检查 GitHub Releases,自动下载、替换、重启。
+- **一键安装 + 一键授权** — 从 /Applications 以外的位置运行时,弹窗一键「安装并重启」,自动覆盖旧版本(固定路径 + 固定证书 = 权限升级后不丢)。权限窗口在检测到缺权限时自动弹出,新增 **Grant All…** 按钮依次触发所有系统授权提示。`build_app.sh` 首次构建自动创建稳定自签证书,不再静默降级 adhoc 签名。
 
 ## 安装 / 构建
 
