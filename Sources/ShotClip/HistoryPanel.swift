@@ -13,8 +13,10 @@ final class HistoryPanel: NSPanel, NSSearchFieldDelegate {
     init() {
         let w: CGFloat = 420
         let h: CGFloat = 520
+        // Not .nonactivatingPanel: the search field needs real keyboard focus,
+        // so the app must activate when the panel opens.
         super.init(contentRect: NSRect(x: 0, y: 0, width: w, height: h),
-                   styleMask: [.nonactivatingPanel, .titled, .closable, .resizable],
+                   styleMask: [.titled, .closable, .resizable, .utilityWindow],
                    backing: .buffered, defer: false)
         title = "Clipboard History"
         isFloatingPanel = true
@@ -60,7 +62,7 @@ final class HistoryPanel: NSPanel, NSSearchFieldDelegate {
             scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
             scroll.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
             listStack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
-            listStack.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
+            listStack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
             listStack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
         ])
         contentView = container
@@ -218,6 +220,10 @@ private final class HistoryRowView: NSView {
                 label.font = .systemFont(ofSize: 11.5)
                 label.maximumNumberOfLines = 4
                 label.textColor = .labelColor
+                // Without this, a long unwrappable line's intrinsic width can
+                // force the (resizable) panel to grow past the screen edge.
+                label.preferredMaxLayoutWidth = 360
+                label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
                 contentView = label
             }
         }
@@ -249,6 +255,10 @@ private final class HistoryRowView: NSView {
         iv.layer?.cornerRadius = 6
         iv.layer?.masksToBounds = true
         iv.heightAnchor.constraint(lessThanOrEqualToConstant: 72).isActive = true
+        // An image view's intrinsic size is the full image size — don't let a
+        // 3000px screenshot push the window wider than the screen.
+        iv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        iv.setContentHuggingPriority(.defaultLow, for: .horizontal)
         return iv
     }
 
