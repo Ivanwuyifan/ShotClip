@@ -175,8 +175,21 @@ enum Updater {
         try unzip.run(); unzip.waitUntilExit()
         guard unzip.terminationStatus == 0 else { throw UpdateError.unzipFailed }
 
-        guard let newApp = try fm.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)
-            .first(where: { $0.pathExtension == "app" }) else { throw UpdateError.appNotFound }
+        // The release zip may contain ShotClip.app at the root or nested one level
+        // down (e.g. inside a "ShotClip/" folder next to install.command), so look
+        // in the root first, then one level into any subdirectories.
+        func findApp(in dir: URL) -> URL? {
+            let entries = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+            if let app = entries.first(where: { $0.pathExtension == "app" }) { return app }
+            for sub in entries where (try? sub.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                if let nested = (try? fm.contentsOfDirectory(at: sub, includingPropertiesForKeys: nil))?
+                    .first(where: { $0.pathExtension == "app" }) {
+                    return nested
+                }
+            }
+            return nil
+        }
+        guard let newApp = findApp(in: work) else { throw UpdateError.appNotFound }
 
         // The apply script must live OUTSIDE `work`, otherwise it deletes itself
         // mid-run when it removes `work`, leaving the update half-applied.
