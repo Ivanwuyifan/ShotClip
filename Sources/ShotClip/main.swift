@@ -69,8 +69,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Updater.checkInBackground()
         }
 
-        Installer.offerMoveIfNeeded()
-        Onboarding.showIfNeeded()
+        // If the installer gate fires (this copy is quitting to overwrite-install
+        // or to defer to the /Applications copy), skip the permission prompts.
+        if !Installer.offerMoveIfNeeded() {
+            Onboarding.showIfNeeded()
+        }
 
         Capture.onCaptured = { [weak self] url in
             if Self.editModeEnabled {

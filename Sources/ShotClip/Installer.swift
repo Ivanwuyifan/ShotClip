@@ -8,29 +8,55 @@ enum Installer {
     private static let skipKey = "ShotClip.skipInstallPrompt"
     static let canonicalPath = "/Applications/ShotClip.app"
 
-    static func offerMoveIfNeeded() {
+    /// Returns true when launch should stop here (the app is quitting either
+    /// to overwrite-install or to defer to the installed copy) — callers must
+    /// then skip the rest of startup (permission prompts etc.).
+    @discardableResult
+    static func offerMoveIfNeeded() -> Bool {
         let current = Bundle.main.bundlePath
-        guard !current.hasPrefix("/Applications/"),
-              !UserDefaults.standard.bool(forKey: skipKey) else { return }
+        guard !current.hasPrefix("/Applications/") else { return false }
 
+        let installedExists = FileManager.default.fileExists(atPath: canonicalPath)
+
+        if installedExists {
+            // Hard block: two copies with the same bundle id fight over TCC
+            // grants, so running this copy alongside the installed one is not
+            // allowed. Overwrite-install (recommended) or defer to it.
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "ShotClip is already installed in Applications"
+            alert.informativeText = "Running two copies at the same time causes permission conflicts (Screen Recording / Accessibility grants follow one copy and silently break the other).\n\nOverwrite the installed copy with this version (recommended), or quit this copy and keep using the installed one."
+            alert.addButton(withTitle: "Overwrite & Relaunch")
+            alert.addButton(withTitle: "Use Installed Copy")
+            NSApp.activate(ignoringOtherApps: true)
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                installAndRelaunch(from: current)
+            default:
+                NSWorkspace.shared.open(URL(fileURLWithPath: canonicalPath))
+                NSApp.terminate(nil)
+            }
+            return true
+        }
+
+        guard !UserDefaults.standard.bool(forKey: skipKey) else { return false }
         let alert = NSAlert()
-        let replacing = FileManager.default.fileExists(atPath: canonicalPath)
-        alert.messageText = replacing
-            ? "Replace the ShotClip in Applications with this version?"
-            : "Install ShotClip to Applications?"
+        alert.messageText = "Install ShotClip to Applications?"
         alert.informativeText = "Keeping one copy at a fixed location lets macOS remember the permissions you grant (Screen Recording, Accessibility) across updates."
-        alert.addButton(withTitle: replacing ? "Replace & Relaunch" : "Install & Relaunch")
+        alert.addButton(withTitle: "Install & Relaunch")
         alert.addButton(withTitle: "Not Now")
         alert.addButton(withTitle: "Don't Ask Again")
         NSApp.activate(ignoringOtherApps: true)
         switch alert.runModal() {
         case .alertFirstButtonReturn:
             installAndRelaunch(from: current)
+            return true
         case .alertThirdButtonReturn:
             UserDefaults.standard.set(true, forKey: skipKey)
         default:
             break
         }
+        return false
     }
 
     private static func installAndRelaunch(from source: String) {
