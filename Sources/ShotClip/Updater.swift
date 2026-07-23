@@ -207,6 +207,15 @@ enum Updater {
         if ! ditto "\(newApp.path)" "$STAGE"; then
             echo "ditto to stage failed"; exit 1
         fi
+        # If the new build's signature differs from the installed one, the old
+        # TCC grants are stale (shown ON but not applied) — reset so the new
+        # app prompts cleanly. Same-signature updates skip this.
+        OLD_REQ=$(codesign -d -r- "\(appPath)" 2>&1 | grep "^designated" || true)
+        NEW_REQ=$(codesign -d -r- "$STAGE" 2>&1 | grep "^designated" || true)
+        if [ "$OLD_REQ" != "$NEW_REQ" ]; then
+            tccutil reset ScreenCapture "\(Bundle.main.bundleIdentifier ?? "com.local.shotclip")" 2>/dev/null || true
+            tccutil reset Accessibility "\(Bundle.main.bundleIdentifier ?? "com.local.shotclip")" 2>/dev/null || true
+        fi
         rm -rf "\(appPath)"
         mv "$STAGE" "\(appPath)"
         xattr -dr com.apple.quarantine "\(appPath)" 2>/dev/null || true
