@@ -4,7 +4,6 @@ import Carbon.HIToolbox
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let overlay = OverlayWindow()
-    private let historyPanel = HistoryPanel()
     private var trackingTimer: Timer?
     private var sendPanel: SendPanel?
     private var annotator: AnnotatorWindow?
@@ -40,7 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addMenuItem(to: menu, title: "Extract Text from Screen (⌘⇧E)", symbol: "text.viewfinder", action: #selector(extractText))
         addMenuItem(to: menu, title: "Translate Screenshot (⌘⇧T)", symbol: "character.bubble", action: #selector(translateShot))
         addMenuItem(to: menu, title: "Translate Selection (⌘⇧L)", symbol: "globe", action: #selector(translateSelection))
-        addMenuItem(to: menu, title: "Clipboard History (⌘⇧V)", symbol: "list.clipboard", action: #selector(showHistory))
+        addMenuItem(to: menu, title: "Paste English Reply (⌘⇧V)", symbol: "arrowshape.turn.up.left.2", action: #selector(suggestReply))
+        addMenuItem(to: menu, title: "AI Email Reply…", symbol: "envelope.arrow.triangle.branch", action: #selector(emailReply))
         addMenuItem(to: menu, title: "AI Settings…", symbol: "brain", action: #selector(showAISettings))
         menu.addItem(.separator())
         let editItem = addMenuItem(to: menu, title: "Edit mode (annotate after capture)", symbol: "pencil.and.outline", action: #selector(toggleEditMode))
@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // or to defer to the /Applications copy), skip the permission prompts.
         if !Installer.offerMoveIfNeeded() {
             Onboarding.showIfNeeded()
+            WhatsNew.showIfUpdated()
         }
 
         Capture.onCaptured = { [weak self] url in
@@ -114,11 +115,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             shotLog("ShotClip: hotkey FIRED id=5 (translate selection)")
             DispatchQueue.main.async { TextActions.translateSelection() }
         }
-        // ⌘⇧V -> clipboard history panel. keycode 9 = 'v'
+        // ⌘⇧V -> paste an AI-drafted English reply to the copied text. keycode 9 = 'v'
         HotkeyManager.shared.register(id: 6, keyCode: 9,
-            modifiers: UInt32(cmdKey | shiftKey)) { [weak self] in
-            shotLog("ShotClip: hotkey FIRED id=6 (history)")
-            DispatchQueue.main.async { self?.historyPanel.toggle() }
+            modifiers: UInt32(cmdKey | shiftKey)) {
+            shotLog("ShotClip: hotkey FIRED id=6 (paste english reply)")
+            DispatchQueue.main.async { TextActions.pasteEnglishReply() }
         }
 
         startHoverTracking()
@@ -171,9 +172,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showOverlay() { overlay.toggle() }
     @objc private func capture() { Capture.interactiveRegion() }
     @objc private func extractText() { TextActions.extractTextFromRegion() }
+    @objc private func emailReply() { TextActions.replyToEmail() }
+    @objc private func suggestReply() { TextActions.pasteEnglishReply() }
     @objc private func translateShot() { TextActions.translateRegion() }
     @objc private func translateSelection() { TextActions.translateSelection() }
-    @objc private func showHistory() { historyPanel.toggle() }
     @objc private func showAISettings() { AISettingsWindow.present() }
 
     @objc private func scrollingCapture() {

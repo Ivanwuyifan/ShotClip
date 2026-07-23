@@ -494,6 +494,11 @@ final class AnnotatorWindow: NSWindow, NSWindowDelegate {
         translate.action = #selector(runTranslate)
         stack.addArrangedSubview(translate)
 
+        let email = toolButton(symbol: "envelope", help: "AI Email Reply — draft a reply to the email in this image")
+        email.target = self
+        email.action = #selector(runEmailReply)
+        stack.addArrangedSubview(email)
+
         let scroll = toolButton(symbol: "arrow.up.and.down.square", help: "Scrolling Capture — select a region and scroll")
         scroll.target = self
         scroll.action = #selector(startScrollCapture)
@@ -618,6 +623,11 @@ final class AnnotatorWindow: NSWindow, NSWindowDelegate {
     @objc private func runTranslate() {
         canvas.commitActiveText()
         TextActions.translate(image: canvas.render())
+    }
+
+    @objc private func runEmailReply() {
+        canvas.commitActiveText()
+        TextActions.replyToEmail(image: canvas.render())
     }
 
     @objc private func startScrollCapture() {

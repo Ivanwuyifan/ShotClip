@@ -26,6 +26,31 @@ enum TextActions {
         }
     }
 
+    // MARK: - AI email reply (screenshot an email, get a drafted reply)
+
+    static func replyToEmail() {
+        captureTempRegion { image in
+            guard let image = image else { return }
+            replyToEmail(image: image)
+        }
+    }
+
+    /// Same flow for an image already in hand (e.g. the editor's current shot).
+    static func replyToEmail(image: NSImage) {
+        OCR.recognise(in: image) { text in
+            DispatchQueue.main.async {
+                guard let text = text, !text.isEmpty else {
+                    ResultPopup.show(title: "AI Email Reply", sections: [
+                        .init(title: "No text recognised",
+                              text: "Select the email's text area and try again."),
+                    ])
+                    return
+                }
+                EmailReplyWindow.begin(emailText: text)
+            }
+        }
+    }
+
     // MARK: - Operate on an already-captured image (annotation editor)
 
     /// OCR an image already in hand (e.g. the editor's current shot).
@@ -57,22 +82,51 @@ enum TextActions {
         }
     }
 
+    // MARK: - Paste English reply (⌘⇧V)
+
+    /// Copy the message you're replying to (⌘C), put the cursor in the input
+    /// box, press ⌘⇧V: an English reply is generated from the clipboard text
+    /// and pasted straight into the field — no window.
+    static func pasteEnglishReply() {
+        let text = NSPasteboard.general.string(forType: .string)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !text.isEmpty else { NSSound.beep(); return }
+        let hud = GeneratingHUD.show(text: "Drafting English reply…")
+        let prompt = """
+        You are replying to the message below. Write a natural, ready-to-send \
+        reply in English, appropriate to the message's content and tone. \
+        Output ONLY the reply text — no explanations, no quotes of the original.
+
+        --- MESSAGE ---
+        \(text)
+        """
+        LLMClient.complete(prompt: prompt) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let reply):
+                    hud.dismiss()
+                    ClipboardMonitor.shared.suppressNext()
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(reply.trimmingCharacters(in: .whitespacesAndNewlines), forType: .string)
+                    // Paste into whatever field currently has focus.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { sendPasteKeystroke() }
+                case .failure(let error):
+                    hud.dismiss(failed: true)
+                    NSSound.beep()
+                    NSLog("ShotClip: paste-reply failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     // MARK: - Translate captured region (⌘⇧T)
 
     /// Select a region → OCR → LLM translation. Translation is auto-copied.
     static func translateRegion() {
         captureTempRegion { image in
             guard let image = image else { return }
-            let popup = ResultPopup.showSpinner(title: "Translate Screenshot")
-            OCR.recognise(in: image) { text in
-                DispatchQueue.main.async {
-                    guard let text = text, !text.isEmpty else {
-                        popup.fail("No text recognised in the selected region.")
-                        return
-                    }
-                    translate(text, into: popup)
-                }
-            }
+            translate(image: image)
         }
     }
 
@@ -145,6 +199,16 @@ enum TextActions {
             NSLog("ShotClip: screencapture failed: \(error)")
             completion(nil)
         }
+    }
+
+    private static func sendPasteKeystroke() {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
+        down?.flags = .maskCommand
+        up?.flags = .maskCommand
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
     }
 
     private static func sendCopyKeystroke() {
