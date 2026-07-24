@@ -9,6 +9,7 @@ final class AISettingsWindow: NSWindow {
     private let languagePopup = NSPopUpButton()
     private let anthropicKeyField = NSSecureTextField()
     private let anthropicModelField = NSTextField()
+    private let cliModelField = NSComboBox()
     private let openAIKeyField = NSSecureTextField()
     private let openAIBaseField = NSTextField()
     private let openAIModelField = NSTextField()
@@ -18,6 +19,7 @@ final class AISettingsWindow: NSWindow {
     private var anthropicRows: [NSView] = []
     private var openAIRows: [NSView] = []
     private var cliRow: NSView?
+    private var cliModelRow: NSView?
 
     static func present() {
         if let existing = current {
@@ -64,6 +66,12 @@ final class AISettingsWindow: NSWindow {
         cliRow = cli
         stack.addArrangedSubview(cli)
         cli.widthAnchor.constraint(equalToConstant: 430).isActive = true
+
+        cliModelField.placeholderString = "empty = CLI default"
+        cliModelField.completes = true
+        let cliModelRow = row("Model (optional)", control: cliModelField)
+        self.cliModelRow = cliModelRow
+        stack.addArrangedSubview(cliModelRow)
 
         let anthropicKeyRow = row("API key", control: anthropicKeyField)
         let anthropicModelRow = row("Model", control: anthropicModelField)
@@ -146,6 +154,7 @@ final class AISettingsWindow: NSWindow {
         openAIKeyField.stringValue = LLMConfig.openAIKey ?? ""
         openAIBaseField.stringValue = LLMConfig.openAIBaseURL
         openAIModelField.stringValue = LLMConfig.openAIModel
+        cliModelField.stringValue = LLMConfig.cliModel
     }
 
     private var selectedProvider: LLMProvider {
@@ -158,6 +167,19 @@ final class AISettingsWindow: NSWindow {
         let p = selectedProvider
         anthropicRows.forEach { $0.isHidden = p != .anthropicAPI }
         openAIRows.forEach { $0.isHidden = p != .openAICompatible }
+        cliModelRow?.isHidden = !(p == .claudeCode || p == .codex)
+        let presets: [String]
+        switch p {
+        case .claudeCode: presets = ["fable", "opus", "sonnet", "haiku"]   // aliases always resolve to the latest model
+        case .codex:      presets = ["gpt-5-codex", "gpt-5", "o3"]
+        default:          presets = []
+        }
+        if cliModelField.objectValues as? [String] != presets {
+            let current = cliModelField.stringValue
+            cliModelField.removeAllItems()
+            cliModelField.addItems(withObjectValues: presets)
+            cliModelField.stringValue = current
+        }
         guard let cli = cliRow as? NSTextField else { return }
         switch p {
         case .claudeCode:
@@ -190,6 +212,7 @@ final class AISettingsWindow: NSWindow {
             ? "https://api.openai.com/v1" : openAIBaseField.stringValue
         LLMConfig.openAIModel = openAIModelField.stringValue.isEmpty
             ? "gpt-4o-mini" : openAIModelField.stringValue
+        LLMConfig.cliModel = cliModelField.stringValue.trimmingCharacters(in: .whitespaces)
     }
 
     @objc private func saveOnly() {

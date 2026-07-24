@@ -56,7 +56,10 @@ enum LLMClient {
             completion(.failure(LLMError.cliNotFound("claude")))
             return
         }
-        runProcess(bin, args: ["-p", prompt, "--output-format", "text"], completion: completion)
+        var args = ["-p", prompt, "--output-format", "text"]
+        let model = LLMConfig.cliModel.trimmingCharacters(in: .whitespaces)
+        if !model.isEmpty { args += ["--model", model] }
+        runProcess(bin, args: args, completion: completion)
     }
 
     private static func runCodexCLI(prompt: String, completion: (Result<String, Error>) -> Void) {
@@ -67,10 +70,12 @@ enum LLMClient {
         let outFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("shotclip-codex-\(UUID().uuidString).txt")
         defer { try? FileManager.default.removeItem(at: outFile) }
-        let result = runProcessCapturing(bin, args: [
-            "exec", "--skip-git-repo-check",
-            "--output-last-message", outFile.path, prompt,
-        ])
+        var args = ["exec", "--skip-git-repo-check",
+                    "--output-last-message", outFile.path]
+        let model = LLMConfig.cliModel.trimmingCharacters(in: .whitespaces)
+        if !model.isEmpty { args += ["-m", model] }
+        args.append(prompt)
+        let result = runProcessCapturing(bin, args: args)
         switch result {
         case .failure(let e): completion(.failure(e))
         case .success:

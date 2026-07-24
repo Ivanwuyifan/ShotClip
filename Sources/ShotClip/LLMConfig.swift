@@ -58,6 +58,13 @@ enum LLMConfig {
         set { d.set(newValue, forKey: "ShotClip.llm.openaiModel") }
     }
 
+    /// Optional model override for the CLI backends (claude --model / codex -m).
+    /// Empty = use the CLI's own default.
+    static var cliModel: String {
+        get { d.string(forKey: "ShotClip.llm.cliModel") ?? "" }
+        set { d.set(newValue, forKey: "ShotClip.llm.cliModel") }
+    }
+
     static var targetLanguage: TargetLanguage {
         get { TargetLanguage(rawValue: d.string(forKey: "ShotClip.llm.targetLang") ?? "") ?? .auto }
         set { d.set(newValue.rawValue, forKey: "ShotClip.llm.targetLang") }
