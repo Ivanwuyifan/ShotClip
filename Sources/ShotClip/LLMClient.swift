@@ -56,7 +56,12 @@ enum LLMClient {
             completion(.failure(LLMError.cliNotFound("claude")))
             return
         }
-        var args = ["-p", prompt, "--output-format", "text"]
+        // Override Claude Code's agent system prompt: without this, smaller
+        // models answer in their "coding assistant" persona instead of just
+        // producing the requested text.
+        var args = ["-p", prompt, "--output-format", "text",
+                    "--system-prompt",
+                    "You are a text-writing engine. Follow the instruction exactly and output ONLY the requested text — no preamble, no explanations, no questions, no offers to help."]
         let model = LLMConfig.cliModel.trimmingCharacters(in: .whitespaces)
         if !model.isEmpty { args += ["--model", model] }
         runProcess(bin, args: args, completion: completion)
